@@ -1,0 +1,8 @@
+pandas>=2.0
+pysam>=0.22
+pyyaml>=6.0
+numpy>=1.24
+
+# peptide generation (external, install separately):
+#   pip install git+https://github.com/winterga/NeoSV-Trace.git
+#   pyensembl install --release 115 --species homo_sapiens

@@ -1,0 +1,54 @@
+# macOS
+.DS_Store
+._*
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.ipynb_checkpoints/
+
+# Run outputs and references — regenerated, and too large to track.
+# The glob matters: outputs are also written to sibling directories when a run
+# must not overwrite an earlier one (e.g. results_patch002/), and those carry
+# the same access-controlled, patient-derived data.
+results/
+results_*/
+pyensembl_cache/
+
+# Local run configurations. These carry absolute paths and the filenames of
+# access-controlled inputs; config/*.example.yaml is the version to share.
+config/*.yaml
+!config/template.yaml
+!config/*.example.yaml
+
+# Per-patient HLA genotypes. Individual-level, access-controlled data: one file
+# per sample, each a person's class I type. Never publishable.
+HLAs/
+HLAs_new_ID/
+
+# Anything derived from those genotypes, including aggregates. The allele panel
+# in reference/ carries only allele names and cohort-level counts — no per-sample
+# row — but it is still derived from access-controlled data, so it stays local.
+# Regenerate it with tools/extract_cohort_alleles.py, which is tracked and which
+# documents the source and the reasoning.
+reference/
+
+# netMHCpan — licensed third-party software (DTU Health Tech, free for academic
+# use, redistribution NOT permitted). It must never enter this public repository.
+# Obtain it per-machine from https://services.healthtech.dtu.dk/ and install it
+# here; tools/run_netmhcpan.py locates it and explains the setup if it is absent.
+# Note this does NOT match vendor/neosv/netMHC.py, which is NeoSV source (MIT).
+netMHCpan-*/
+netMHCpan-*.tar.gz
+
+# Internal working documents. These carry results, pending items and the
+# chronological record of how conclusions changed; the public repository is the
+# method and the code, not the findings. They live on locally and in backups.
+WORKLOG.md
+docs/OPEN_QUESTIONS.md
+docs/EXECUTIVE_SUMMARY.md
+docs/EXECUTIVE_SUMMARY_brief.md
+docs/EXECUTIVE_SUMMARY_focused.md
+docs/STRAND_COMPARISON.md
+docs/LOCUS_VS_PEPTIDE.md

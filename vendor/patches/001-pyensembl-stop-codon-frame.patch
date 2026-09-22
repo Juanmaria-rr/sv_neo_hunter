@@ -1,0 +1,20 @@
+--- /tmp/fusion_class.orig.py	2026-08-12 11:54:56
++++ vendor/neosv/fusion_class.py	2026-08-12 11:54:56
+@@ -59,10 +59,12 @@
+             end = start + self.cut_length - 1
+         else:
+             end = self.comp_length - 1
+-            # pyensembl coding_sequence_ranges does't not include the stop codon
+-            # but coding_sequence includes the stop codon, so we should minus 3
+-            # additionally for 3' part transcript
+-            start = end - self.cut_length + 1 - 3
++            # PATCHED (see vendor/patches/001-pyensembl-stop-codon-frame.md).
++            # pyensembl changed the coding-sequence accessor at v2.3.13: the stop
++            # codon is no longer excluded from coding_sequence_position_ranges, so
++            # subtracting 3 here shifts the 3' side of the fusion one amino acid
++            # out of frame. Correct for pyensembl > 2.3.13 (openvax/pyensembl#176).
++            start = end - self.cut_length + 1
+         return start, end
+ 
+     @property
+\ No newline at end of file

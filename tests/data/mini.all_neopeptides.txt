@@ -1,0 +1,5 @@
+prefix	sv_id	chrom1	pos1	gene1	transcript_id1	strand1	chrom2	pos2	gene2	transcript_id2	strand2	svtype	frameshift	junction_nt	junction_aa	spans_junction	neopeptide	pep_length
+mini	sv1a	1	1000000	GENEA	ENST01	+	1	1000221	GENEA	ENST01	+	DEL	True	300	100	True	MATCHPEPT	9
+mini	sv1a	1	1000000	GENEA	ENST01	+	1	1000221	GENEA	ENST01	+	DEL	True	300	100	False	NOTINCAT1	9
+mini	sv2a	1	2000000	GENEB	ENST02	-	1	2000003	GENEB	ENST02	-	DEL	True	150	50	True	FFFFFFFFF	9
+mini	sv3a	1	3000000	GENEC	ENST03	+	7	5000000	GENED	ENST04	-	BND	True	200	66	True	OTHERPEPT	9

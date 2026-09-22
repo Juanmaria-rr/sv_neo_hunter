@@ -1,0 +1,73 @@
+# Template run config — copy, fill in, run.
+#
+# The analysis needs exactly two things: a REFERENCE catalogue of peptides to
+# look for, and a set of SAMPLES with SV calls. Everything else is optional and
+# degrades gracefully: a missing modality is recorded as `NA`, never as a
+# negative result.
+
+run_name: my_run
+
+# Stage-2 backend: `neosv` (vendored, default), `precomputed`, or `neosv_trace`.
+peptide_generator: neosv
+
+genome:
+  build: GRCh38
+  # Both sides must be on the same build and annotation release. No liftover is
+  # performed anywhere; a coordinate mismatch would silently destroy breakpoint
+  # proximity and corrupt every RNA lookup.
+  ensembl_release: 115
+
+reference:
+  name: my_reference
+  peptides: /path/to/reference_peptides.tsv   # one row per peptide
+  peptide_column: neoantigen                  # REQUIRED: the peptide string
+  gene_column: gene1                          # null -> gene concordance not evaluated
+  svtype_column: svtype                       # null -> svtype concordance not evaluated
+  pool: null                                  # optional: larger set WITH coordinates,
+                                              # needed for breakpoint proximity
+  proteome: /path/to/Homo_sapiens.GRCh38.pep.all.fa.gz   # null -> self test is NA
+
+resources:
+  pyensembl_cache: /path/to/pyensembl_cache
+  gnomad_sv: /path/to/gnomad.v4.1.sv.sites.vcf.gz   # null -> PON-only privacy,
+                                                     # flagged in privacy_note
+
+# Sensitivity branches. Differ ONLY in stage-1 admission so any difference in the
+# result is attributable to admission. Use one branch if you do not need the
+# comparison. `pon_max` applies to germline/parental VCFs only.
+branches:
+  - name: default
+    pon_max: 10
+
+samples:
+  # Minimum viable sample: a name and an SV VCF. Stages 7-8 will be NA.
+  - name: sample_A
+    vcf: /path/to/sample_A.sv.vcf.gz
+    vcf_kind: somatic        # germline = the background genome shared with
+                             #            descendants; gets population filters
+                             # somatic  = acquired relative to the parent;
+                             #            assumed already panel-filtered
+    parent: null             # null = root, or unrelated samples (flat list)
+
+  # Full sample, with every modality.
+  - name: sample_B
+    vcf: /path/to/sample_B.sv.vcf.gz
+    vcf_kind: somatic
+    parent: sample_A         # lineage: parents run first, and an event present
+                             # in an ancestor is attributed to the ancestor
+    rna_bam: /path/to/sample_B.rna.bam
+    isofox_dir: /path/to/isofox/sample_B
+    isofox_prefix: sample_B-RNA.isf
+    dna_bam: /path/to/sample_B.dna.bam
+    notes: free text, carried into the report
+
+# Optional threshold overrides. Anything set here is echoed into every manifest,
+# so a result can never be traced to a threshold that is not written down with
+# it. Names are the constants in src/svneo/criteria.py.
+# criteria:
+#   STRONG_MIN_JUNCTION_READS: 5
+#   PON_MAX: 10
+#   GNOMAD_MAX_AF: 0.001
+#   NULL_PERMUTATIONS: 1000
+
+out_dir: results

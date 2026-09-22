@@ -1,0 +1,113 @@
+# A clonal lineage tested against a reference SV-neoantigen catalogue.
+#
+# A worked example with every field filled in. Nothing in src/svneo names a
+# particular cell line or cohort: swap this file and the same code answers the
+# same question for any sample set against any catalogue.
+#
+# Paths are placeholders. A real configuration carries absolute paths and the
+# filenames of access-controlled inputs, and is git-ignored for that reason.
+#
+# A sample whose BAM is absent is recorded as `NA` for the affected stages rather
+# than failing, so a partially available dataset still runs.
+
+run_name: lineage_vs_catalogue
+
+# Stage-2 backend (the only pluggable stage). `neosv` is the vendored, MIT
+# licensed NeoSV plus this repo's candidate-peptide output; `precomputed` reuses
+# a stored output; `neosv_trace` needs an external checkout (resources.neosv_path).
+peptide_generator: neosv
+
+genome:
+  build: GRCh38
+  ensembl_release: 115          # both sides on one release -> no liftover anywhere
+
+reference:
+  name: example_catalogue
+  # Curated shortlist: one row per unique peptide, with whatever per-peptide
+  # annotations the catalogue carries.
+  peptides: /path/to/reference_catalogue.tsv
+  peptide_column: neoantigen
+  gene_column: gene1
+  svtype_column: svtype
+  # Full pool, carrying the reference breakpoint coordinates that level 3
+  # (breakpoint proximity) needs. Optional: without it level 3 is skipped.
+  pool: /path/to/reference_pool_with_coordinates.tsv
+  pool_peptide_column: neoantigen
+  # Self-peptide test. Without it `is_self` is recorded as NA, never as passing.
+  proteome: /path/to/Homo_sapiens.GRCh38.pep.all.fa.gz
+
+resources:
+  pyensembl_cache: /path/to/pyensembl_cache
+  gnomad_sv: /path/to/gnomad.v4.1.sv.sites.vcf.gz
+  # neosv_path: only needed to override the vendored copy in vendor/neosv_trace/.
+  # neosv_path: /path/to/another/NeoSV-Trace/checkout
+  # Reuse an existing NeoSV-Trace output instead of regenerating, per sample:
+  # peptides_from:
+  #   parental: /path/to/prefix
+
+# Sensitivity branches differ ONLY in stage-1 admission, so any difference in the
+# result is attributable to admission and nothing else. `pon_max: null` disables
+# the panel filter; it applies to germline/parental VCFs only, because somatic
+# call sets arrive already panel-filtered by the caller.
+branches:
+  # The panel filter reaches a candidate at TWO points — stage-1 admission and
+  # the `is_private` verdict at stage 6 — so a branch that means "report the
+  # panel, do not filter on it" has to relax both. Relaxing only `pon_max` is a
+  # no-op on somatic call sets, where the caller has already written its panel
+  # verdict into FILTER and `pon_max` never sees those records.
+  #
+  # INFERRED breakends stay excluded in both branches. That is not a panel
+  # judgement — they have no read support, hence no junction sequence to
+  # translate — so admitting them would make the branches differ in a second,
+  # unrelated respect and break attribution.
+  - name: noPON
+    pon_max: null               # this pipeline's own PON_COUNT threshold: off
+    admit_panel_filtered: true  # also admit somatic FILTER=PON records
+    pon_in_privacy: false       # PON_COUNT reported, but is_private = gnomAD only
+  - name: PON10
+    pon_max: 10
+
+# The lineage. The parental line is analysed with its germline VCF; every derived
+# sample uses only its somatic VCF, because the germline genome of a derived
+# clone IS the parent's and analysing it again would double-count.
+#
+# `parent` is what makes attribution meaningful: an event present in the parent
+# cannot be attributed to whatever was done to make the child. Set it to null
+# for unrelated samples and attribution is skipped rather than faked.
+samples:
+  - name: parental
+    vcf_kind: germline
+    parent: null
+    vcf: /path/to/sv_calls/parental.germline.sv.vcf.gz
+    rna_bam: /path/to/rna/parental.md.bam
+    isofox_dir: /path/to/rna/isofox/parental
+    isofox_prefix: parental.isf
+    dna_bam: /path/to/dna/parental.redux.bam
+    notes: >
+      "Germline" here means "present before any engineering", not "inherited":
+      a cultured line carries drift of its own.
+
+  - name: clone_A
+    vcf_kind: somatic
+    parent: parental
+    vcf: /path/to/sv_calls/clone_A.somatic.sv.vcf.gz
+    rna_bam: /path/to/rna/clone_A.md.bam
+    isofox_dir: /path/to/rna/isofox/clone_A
+    isofox_prefix: clone_A.isf
+    dna_bam: /path/to/dna/clone_A.redux.bam
+
+  - name: clone_B
+    vcf_kind: somatic
+    parent: clone_A
+    vcf: /path/to/sv_calls/clone_B.somatic.sv.vcf.gz
+    rna_bam: /path/to/rna/clone_B.md.bam
+    isofox_dir: /path/to/rna/isofox/clone_B
+    isofox_prefix: clone_B.isf
+    dna_bam: /path/to/dna/clone_B.redux.bam
+
+# Threshold overrides for this run. Everything not listed keeps the value in
+# src/svneo/criteria.py, and whatever is listed is echoed into every manifest.
+# criteria:
+#   STRONG_MIN_JUNCTION_READS: 5
+
+out_dir: results

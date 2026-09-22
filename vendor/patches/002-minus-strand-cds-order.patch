@@ -1,0 +1,38 @@
+--- a/neosv/transcript_utils.py
++++ b/neosv/transcript_utils.py
+@@ -39,7 +39,19 @@
+              from 5' to 3', cds 1, cds 2, ...
+              [start, end], start < end
+     """
+-    cds_ranges = transcript.coding_sequence_position_ranges
++    # PATCHED (see vendor/patches/002-minus-strand-cds-order.md).
++    # `coding_sequence_position_ranges` is ordered by COORDINATE, which is
++    # reading order on the plus strand and its reverse on the minus strand. The
++    # docstring above promises 5'->3', and every consumer relies on it:
++    # `get_noncds_range` builds the introns by subtracting neighbouring exons,
++    # and `truncate_cds` slices this list to count the exons preceding a
++    # breakpoint. Given coordinate order on a minus-strand transcript, the
++    # introns come out with start > end (so no position can ever fall inside
++    # them) and the exon count is taken from the wrong end of the transcript.
++    # Sorting here restores the documented invariant for every consumer at once.
++    cds_ranges = sorted(transcript.coding_sequence_position_ranges)
++    if transcript.strand == '-':
++        cds_ranges = cds_ranges[::-1]
+     return cds_ranges
+ 
+ 
+@@ -52,7 +64,13 @@
+              if there is no interval, for example, no utr,
+              we will add a interval (0,0)
+     """
+-    cds_ranges = transcript.coding_sequence_position_ranges
++    # PATCHED (see vendor/patches/002-minus-strand-cds-order.md).
++    # Was `transcript.coding_sequence_position_ranges`, read directly. The
++    # arithmetic below is written for 5'->3' order — on the minus branch it
++    # subtracts a lower-coordinate exon from a higher one — so it must consume
++    # the ordered accessor rather than the raw one, or it produces inverted
++    # intervals. Routing through get_cds_range keeps one source of truth.
++    cds_ranges = get_cds_range(transcript)
+     ncds_ranges = []
+     if transcript.strand == '+':
+         utr5_start = transcript.start
