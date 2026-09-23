@@ -58,23 +58,39 @@ SPEC: dict[str, tuple] = {
 
     # -- lineage -----------------------------------------------------------
     "acquired_in": ("lineage", "bookkeeping", "identity", "the run each candidate table came from",
-        "Which line's own variant calls produce this peptide. No threshold."),
+        "The line whose OWN variant calls produce this peptide — where it entered the "
+        "lineage. Semicolon-separated if two lines generate the same sequence "
+        "independently. **Filter on this to ask what a knockout added, and to stay "
+        "inside a line-restricted subset**; filtering on `present_in` instead pulls "
+        "back every line that merely inherits it. No threshold."),
     "present_in": ("lineage", "bookkeeping", "identity", "acquired_in + the configured parent/child lineage",
         "Every line carrying it, inheritance included. No threshold."),
-    "n_lines_present": ("lineage", "bookkeeping", "measurement", "count of present_in", "No threshold."),
+    "n_lines_present": ("lineage", "bookkeeping", "measurement", "count of present_in",
+        "How many lines of the lineage carry this peptide. 1 means it is confined to "
+        "one branch; the maximum equals the number of lines in the run, reached by "
+        "anything the root acquired. No threshold."),
 
     # -- stage 1, the SV call itself (DNA) ---------------------------------
     "sv_id": ("stage 1", "DNA — caller", "identity", "the SV VCF", "Caller's record ID for the junction."),
     "chrom1": ("stage 1", "DNA — caller", "identity", "the SV VCF", "Chromosome of breakend 1."),
     "pos1": ("stage 1", "DNA — caller", "identity", "the SV VCF", "Position of breakend 1, 1-based."),
-    "chrom2": ("stage 1", "DNA — caller", "identity", "the SV VCF", "Chromosome of breakend 2."),
+    "chrom2": ("stage 1", "DNA — caller", "identity", "the SV VCF",
+        "Chromosome of the 3' breakend, without a `chr` prefix. Differing from "
+        "`chrom1` makes the junction inter-chromosomal, which forces `test` to "
+        "`chimeric` and leaves `event_size` undefined."),
     "pos2": ("stage 1", "DNA — caller", "identity", "the SV VCF", "Position of breakend 2."),
     "gene1": ("stage 1", "annotation", "annotation", "Ensembl, by overlap with breakend 1",
         "Gene at the 5' breakend. Reference annotation, not a measurement."),
-    "gene2": ("stage 1", "annotation", "annotation", "Ensembl, by overlap with breakend 2", "Gene at the 3' breakend."),
+    "gene2": ("stage 1", "annotation", "annotation", "Ensembl, by overlap with breakend 2",
+        "Gene overlapping the 3' breakend, from the reference annotation rather than "
+        "from any measurement. It contributes the downstream half of the fusion "
+        "protein, so a frameshift makes every residue it contributes novel."),
     "strand1": ("stage 1", "annotation", "annotation", "Ensembl transcript strand",
         "Strand of the 5' transcript. Emitted so results can be stratified by it."),
-    "strand2": ("stage 1", "annotation", "annotation", "Ensembl transcript strand", "Strand of the 3' transcript."),
+    "strand2": ("stage 1", "annotation", "annotation", "Ensembl transcript strand",
+        "Strand of the 3' transcript, `+` or `-`. Emitted so results can be "
+        "stratified by strand pair; note that per-peptide proportions by strand are "
+        "dominated by a few prolific loci, so stratify per event."),
     "svtype": ("stage 1", "DNA — caller", "annotation", "the SV VCF",
         "DEL / DUP / INV / BND / TRA, as the caller typed it."),
 
@@ -142,14 +158,21 @@ SPEC: dict[str, tuple] = {
         "Compare against `junction_reads`: RNA far above DNA is the splicing-artefact "
         "signature."),
     "vf_bp2": ("stage 6", "DNA — read evidence", "measurement", "caller VF field",
-        f"Same for breakend 2. Enters `sv_hc` at >= {C.HC_MIN_VF}."),
+        f"DNA fragments supporting the 3' breakend. Enters `sv_hc` at >= {C.HC_MIN_VF}. "
+        "Like `vf_bp1`, compare it against `junction_reads`: RNA support far exceeding "
+        "DNA support is the splicing-artefact signature."),
     "qual_bp1": ("stage 6", "DNA — read evidence", "measurement", "caller QUAL",
         f"Caller confidence, breakend 1. Enters `sv_hc` at >= {C.HC_MIN_QUAL}."),
-    "qual_bp2": ("stage 6", "DNA — read evidence", "measurement", "caller QUAL", "Same, breakend 2."),
+    "qual_bp2": ("stage 6", "DNA — read evidence", "measurement", "caller QUAL",
+        f"The SV caller's own confidence score for the 3' breakend, on its Phred-like "
+        f"scale. Enters `sv_hc` at >= {C.HC_MIN_QUAL}."),
     "segmapq_bp1": ("stage 6", "DNA — read evidence", "measurement", "caller SEGMAPQ",
         f"Mapping quality of the highest-contributing segment, breakend 1. Low values "
         f"mean the region is repetitive. Enters `sv_hc` at >= {C.HC_MIN_SEGMAPQ}."),
-    "segmapq_bp2": ("stage 6", "DNA — read evidence", "measurement", "caller SEGMAPQ", "Same, breakend 2."),
+    "segmapq_bp2": ("stage 6", "DNA — read evidence", "measurement", "caller SEGMAPQ",
+        f"Mapping quality of the highest-contributing segment at the 3' breakend, "
+        f"0-60. Low values mean that end sits in repetitive sequence and the locus "
+        f"assignment is doubtful. Enters `sv_hc` at >= {C.HC_MIN_SEGMAPQ}."),
 
     # -- stage 6, is it the sample's own? ----------------------------------
     "pon_count": ("stage 6", "DNA — cohort of normals", "measurement", "panel-of-normals annotation",
@@ -160,8 +183,9 @@ SPEC: dict[str, tuple] = {
         f"only. Empty counts as {C.PON_ABSENT_MEANS}, because treating absent as high "
         "would discard the cleanest breakends."),
     "pon_fraction": ("stage 6", "DNA — cohort of normals", "measurement", "pon_count / panel size",
-        "The same count means different things against different panels; report this "
-        "beside the raw number."),
+        "`pon_count` expressed as a fraction of the panel — the interpretable form. "
+        "A given raw count means opposite things against panels of different sizes, "
+        "so quote this alongside it."),
     "pass_pon": ("stage 6", "DNA — cohort of normals", "verdict — does NOT filter here",
         "pon_count vs PON_MAX", f"`pon_count < {C.PON_MAX}`. On the noPON branch this is "
         "recorded and deliberately excluded from `is_private`."),
@@ -172,7 +196,7 @@ SPEC: dict[str, tuple] = {
         f"{C.GNOMAD_RECIPROCAL_OVERLAP:.0%} reciprocal overlap. **NaN means not "
         "evaluated**, which is not the same as rare — inter-chromosomal junctions are "
         "left unmatched because gnomAD-SV does not represent them comparably."),
-    "gnomad_af_popmax": ("stage 6", "DNA — population database", "measurement", "gnomAD-SV per-ancestry AFs",
+    "gnomad_af_popmax": ("stage 6", "DNA — population database", "measurement", "gnomAD-SV per-ancestry allele frequencies",
         "Highest frequency across ancestry groups. Preferred over a global average, "
         "which is dominated by the largest group and can hide a variant that is rare "
         "worldwide but common where the donor came from."),
@@ -186,15 +210,21 @@ SPEC: dict[str, tuple] = {
         "On the noPON branch only the gnomAD half counts, so it is half an answer; "
         "`privacy_note` says which halves ran."),
     "privacy_note": ("stage 6", "bookkeeping", "annotation", "which privacy tests ran",
-        "Plain-text record of what `is_private` was actually computed from. "
-        "`this event IS in the panel` means the panel contradicts it and was ignored "
-        "by design."),
+        "Plain text saying which halves of the privacy test actually ran, so "
+        "`is_private` can be read for what it is. On a panel-reporting branch it "
+        "begins `gnomAD only — panel count reported, not applied`, and gains "
+        "`; this event IS in the panel` when the panel has seen the junction in "
+        "unrelated normals — i.e. **the panel contradicts `is_private` and was "
+        "ignored by design**. On a panel-applying branch it instead reads "
+        "`gnomAD not evaluated — PON only`, or is empty when both halves ran."),
 
     # -- stage 7, expression (RNA) -----------------------------------------
     "gene1_TPM": ("stage 7", "RNA — quantification", "measurement", "Isofox transcript quantification",
         f"Expression of the 5' gene in this sample's RNA. `expressed` needs >= "
         f"{C.TPM_EXPRESSED} TPM."),
-    "gene2_TPM": ("stage 7", "RNA — quantification", "measurement", "Isofox", "Expression of the 3' gene."),
+    "gene2_TPM": ("stage 7", "RNA — quantification", "measurement", "Isofox transcript quantification",
+        f"Expression of the 3' gene in this sample's RNA, in transcripts per million. "
+        f"`expressed` requires >= {C.TPM_EXPRESSED} TPM here AND at the 5' gene."),
     "min_side_TPM": ("stage 7", "RNA — quantification", "measurement", f"{C.COVERAGE_SUMMARY}(gene1_TPM, gene2_TPM)",
         "The quieter of the two sides. `min`, never `max` (`COVERAGE_SUMMARY`): taking "
         "the maximum reports a silent locus as covered because its partner is "
@@ -221,11 +251,28 @@ SPEC: dict[str, tuple] = {
         "(`SOFTCLIPS_TIER_EVENTS`, `COVERAGE_TIERS_EVENTS` both False): clipped reads "
         "whose supplementary alignments land megabases away end near the breakpoint "
         "and demonstrably do not cross it."),
-    "test": ("stage 8", "bookkeeping", "annotation", "event geometry",
-        f"Which junction test applied. Events below {C.MIN_TESTABLE_GAP_SIZE} bp are "
-        "UNTESTABLE — aligners emit no N gap below their minimum intron, so a negative "
-        "would mean nothing."),
-    "test_reason": ("stage 8", "bookkeeping", "annotation", "event geometry", "Why that test, or why none could run."),
+    "test": ("stage 8", "RNA — direct read counting", "annotation",
+        "the event's geometry, decided BEFORE any read is examined",
+        "**Which of the three counting mechanisms is applicable to this junction**, "
+        "chosen from its geometry alone. One of `insertion` (the junction inserts at "
+        f"least {C.MIN_INSERT_LEN} bp), `chimeric` (inter-chromosomal, or BND/TRA), "
+        f"`sizegap` (intra-chromosomal with a resolvable size >= "
+        f"{C.MIN_TESTABLE_GAP_SIZE} bp), or `none`. **It gates which "
+        "`junction_by_*` column can be non-zero**: `sizegap` can only produce ngap "
+        "counts, `chimeric` only sa, `insertion` only insert. Order matters — an "
+        "insertion is tested as an insertion even when its breakend span is tiny, "
+        "because the span is not the lesion. `none` means no mechanism applies and "
+        "`rna_tier` is then `UNTESTABLE`, not `NONE`: untested is not tested-negative."),
+    "test_reason": ("stage 8", "RNA — direct read counting", "annotation",
+        "the geometry that selected `test`, with its measured values",
+        "**Why that test and not another, in words, with the numbers that decided "
+        "it.** Four shapes: `insertion-driven (insert_len=N)`; "
+        "`intra-chromosomal N bp: CIGAR N-gap test`; `inter-chromosomal: needs "
+        f"SA-to-partner / fusion caller`; and, when `test` is `none`, either "
+        f"`N bp < {C.MIN_TESTABLE_GAP_SIZE} bp: below the aligner's minimum intron, "
+        "no N-gap can exist` or `intra-chromosomal with no resolvable size`. Read it "
+        "when a junction has no reads: it says whether that is a real negative or a "
+        "test that could never have fired."),
 
     # -- Isofox's own calls, independent of the above ----------------------
     "nearest_alt_sj_bp": ("stage 7", "RNA — Isofox splice calls", "measurement", "Isofox alternative-splice-junction calls",
@@ -243,7 +290,12 @@ SPEC: dict[str, tuple] = {
         "Whether an alternative splice junction falls inside the search window."),
     "retained_intron": ("stage 7", "RNA — Isofox splice calls", "measurement", "Isofox", "Retained-intron calls near the junction."),
     "isofox_fusion": ("stage 7", "RNA — Isofox splice calls", "annotation", "Isofox", "Isofox's own fusion call, if any."),
-    "isofox_fusion_support": ("stage 7", "RNA — Isofox splice calls", "measurement", "Isofox", "Its supporting fragments."),
+    "isofox_fusion_support": ("stage 7", "RNA — Isofox splice calls", "measurement", "Isofox fusion calling",
+        "Fragments Isofox counts behind its own fusion call at this locus. Where both "
+        "this and `junction_reads` are populated they are two tools counting the same "
+        "junction independently, which is the one place a direct number-against-number "
+        "cross-check is possible; usually empty, since Isofox only calls fusions it "
+        "recognises."),
 
     # -- junction evidence by mechanism (RNA, our own counting) ------------
     "junction_by_ngap": ("stage 8", "RNA — direct read counting", "measurement",
@@ -268,7 +320,9 @@ SPEC: dict[str, tuple] = {
         "thousands of reads whether or not the junction exists, which is why "
         "coverage never tiers an event."),
     "coverage_bp2": ("stage 8", "RNA — direct read counting", "measurement",
-        f"alignments within {C.COVERAGE_WINDOW} bp of breakend 2", "The same at breakend 2."),
+        f"alignments within {C.COVERAGE_WINDOW} bp of breakend 2",
+        "RNA alignments around the 3' breakend. Context for how much signal was "
+        "available there, never evidence that the junction exists."),
     "min_coverage": ("stage 8", "RNA — direct read counting", "measurement", "min of the two",
         "The quieter side. `min`, never `max`."),
     "softclip_bp1": ("stage 8", "RNA — direct read counting", "measurement",
@@ -279,14 +333,20 @@ SPEC: dict[str, tuple] = {
         "reads whose supplementary alignments landed megabases away once produced a "
         "candidate that did not survive."),
     "softclip_bp2": ("stage 8", "RNA — direct read counting", "measurement",
-        "soft clips at breakend 2", "The same at breakend 2."),
+        f"soft clips >= {C.MIN_SOFTCLIP_LEN} bp at breakend 2",
+        "Reads whose soft clip sits at the 3' breakend. Diagnostic only: a clip shows "
+        "a read ENDS there, not where the rest of it went."),
     "alignments_bp1": ("stage 8", "RNA — direct read counting", "measurement", "pysam",
         "Alignment records examined at breakend 1, before the mapping-quality cut."),
-    "alignments_bp2": ("stage 8", "RNA — direct read counting", "measurement", "pysam", "The same at breakend 2."),
+    "alignments_bp2": ("stage 8", "RNA — direct read counting", "measurement", "pysam",
+        "Alignment records examined at the 3' breakend before the mapping-quality "
+        "cut. The denominator for `low_mapq_bp2`."),
     "low_mapq_bp1": ("stage 8", "RNA — direct read counting", "measurement", "pysam",
         f"Alignments discarded at breakend 1 for MAPQ < {C.MIN_READ_MAPQ}. A high "
         "share means the region is repetitive and the locus assignment is doubtful."),
-    "low_mapq_bp2": ("stage 8", "RNA — direct read counting", "measurement", "pysam", "The same at breakend 2."),
+    "low_mapq_bp2": ("stage 8", "RNA — direct read counting", "measurement", "pysam",
+        f"Alignments discarded at the 3' breakend for MAPQ < {C.MIN_READ_MAPQ}. A "
+        "high share of `alignments_bp2` means that end is repetitive."),
 
     # -- lesion size --------------------------------------------------------
     "span": ("stage 1", "DNA — caller", "measurement", "|pos2 - pos1|",
@@ -307,10 +367,16 @@ SPEC: dict[str, tuple] = {
         "Fragile site containing breakend 1 under the CONSERVATIVE catalogue "
         "(~1.2% of the genome). Empty = not inside one. No threshold: a position "
         "either falls in an interval or it does not."),
-    "cfs_narrow_bp2": ("annotation", "genomic interval", "annotation", "conservative CFS catalogue", "The same for breakend 2."),
+    "cfs_narrow_bp2": ("annotation", "genomic interval", "annotation", "conservative CFS catalogue",
+        "Fragile site containing the 3' breakend under the conservative catalogue "
+        "(~1.2% of the genome). Empty = not inside one. Annotated separately from "
+        "`cfs_narrow_bp1` because the two ends can fall on different sides of a "
+        "boundary."),
     "cfs_narrow_tier_bp1": ("annotation", "genomic interval", "annotation", "the catalogue's own tier column",
         "`core` (0.5% of the genome) or `extended` (0.7%), at breakend 1."),
-    "cfs_narrow_tier_bp2": ("annotation", "genomic interval", "annotation", "the catalogue's tier column", "The same for breakend 2."),
+    "cfs_narrow_tier_bp2": ("annotation", "genomic interval", "annotation", "the catalogue's tier column",
+        "`core` or `extended` region of the conservative catalogue at the 3' "
+        "breakend; empty when that end is outside one."),
     "cfs_narrow_status": ("annotation", "genomic interval", "annotation — does NOT filter", "cfs_narrow_bp1 + cfs_narrow_bp2",
         "`none` / `bp1` / `bp2` / `both`. Kept per end rather than collapsed to a "
         "boolean: one end deep inside a fragile site and the other far outside is a "
@@ -320,7 +386,9 @@ SPEC: dict[str, tuple] = {
         "Fragile site containing breakend 1 under the PERMISSIVE catalogue. **That "
         "catalogue covers ~65% of the genome**, so a hit is close to what chance "
         "alone produces and is not evidence on its own."),
-    "cfs_broad_bp2": ("annotation", "genomic interval", "annotation", "permissive CFS catalogue", "The same for breakend 2."),
+    "cfs_broad_bp2": ("annotation", "genomic interval", "annotation", "permissive CFS catalogue",
+        "Fragile site containing the 3' breakend under the permissive catalogue, "
+        "whose ~65% genome footprint makes a hit close to the chance expectation."),
     "cfs_broad_status": ("annotation", "genomic interval", "annotation — does NOT filter", "cfs_broad_bp1 + cfs_broad_bp2",
         "`none` / `bp1` / `bp2` / `both` under the permissive catalogue."),
     "cfs_agreement": ("annotation", "genomic interval", "annotation — does NOT filter", "the two status columns",
@@ -341,10 +409,16 @@ SPEC: dict[str, tuple] = {
         "never observed presentation**: says nothing about proteasomal processing, TAP "
         "transport, surface abundance or T-cell recognition."),
     "n_alleles_binding": ("MHC layer", "prediction — netMHCpan", "measurement", "netMHCpan",
-        "How many of the line's own alleles bind it (out of 6)."),
+        "How many of the cell line's own class I alleles bind this peptide, out of the "
+        "six in its genotype. 0 means `presentable` is False. A peptide binding one "
+        "allele is presentable by that cell just as surely as one binding several; the "
+        "count is breadth, not confidence — for confidence read "
+        "`presentation_margin`."),
     "binding_alleles": ("MHC layer", "prediction — netMHCpan", "annotation", "netMHCpan", "Which ones, `;`-separated."),
     "presentation_best_allele": ("MHC layer", "prediction — netMHCpan", "annotation", "netMHCpan",
-        "The allele giving the largest margin."),
+        "Which of the line's own alleles gives the largest `presentation_margin`, "
+        "written as `HLA-A02:01` with no asterisk. This is the allele the robustness "
+        "bin refers to; a peptide may bind others less comfortably."),
     "presentation_margin": ("MHC layer", "derived from prediction", "measurement", "distance to the three binder cuts",
         "**How much room is left before the call flips.** Distance to each cut as a "
         "fraction of that cut, the SMALLEST of the three (the constraint holding the "
@@ -352,11 +426,47 @@ SPEC: dict[str, tuple] = {
         "Scales are mixed on purpose, so it ranks fragility rather than estimating a "
         "flip probability."),
     "presentation_limiting_cut": ("MHC layer", "derived from prediction", "annotation", "argmin of the three distances",
-        "Which cut is closest to failing: `affinity_nM`, `rank_BA` or `rank_EL`."),
+        "Which of the three cuts is closest to failing, and therefore the one holding "
+        "the call up: `affinity_nM`, `rank_BA` or `rank_EL`. Empty for non-binders. "
+        "Among marginal calls it is spread across all three rather than concentrated "
+        "in one, so the fragility comes from the conjunction, not a single badly "
+        "placed threshold."),
     "presentation_robustness": ("MHC layer", "derived from prediction", "verdict — does NOT filter", "presentation_margin, binned",
-        "`flippable` <= 10% of a cut, `marginal` <= 25%, `solid` <= 50%, `robust` > 50%. "
-        "Not a stricter biological claim — the same criterion minus the calls a re-run "
-        "or a predictor version change would flip."),
+        "One of four labels, from `presentation_margin`: `flippable` (within 10% of a "
+        "cut), `marginal` (within 25%), `solid` (within 50%), `robust` (further than "
+        "50% inside every cut). Empty for non-binders. **Not a stricter biological "
+        "claim** — it is the identical binder criterion minus the calls that a re-run, "
+        "a predictor version change or a threshold nudge would flip."),
+
+    # -- cohort-side verdicts, given their own entries so they do not fall
+    # -- through to the generic "populated only where matched" text ---------
+    "autologous_verdict": ("stages 3-5 (cohort)", "prediction — netMHCpan", "annotation — does NOT filter",
+        "the cohort-side binder test over a catalogue patient's genotype",
+        "One of four values, and the distinction between them is the point: `binder` "
+        "(a patient carrying this peptide has an allele it binds), `non_binder` "
+        "(tested and it does not), `unevaluable_no_typed_patient` (every patient "
+        "carrying it lacks a linkable genotype), or `unevaluable_allele_outside_panel` "
+        "(the carrying patient has an allele that was never predicted). "
+        "**`unevaluable` is not `non_binder`** — the binder count is a floor, and the "
+        "size of the gap is exactly these rows."),
+    "autologous_limiting_cut": ("stages 3-5 (cohort)", "derived from prediction", "annotation — does NOT filter",
+        "argmin of the three distances, cohort side",
+        "Which of the three cuts holds the cohort-side call up: `affinity_nM`, "
+        "`rank_BA` or `rank_EL`. Empty for non-binders and unevaluables."),
+    "autologous_robustness": ("stages 3-5 (cohort)", "derived from prediction", "annotation — does NOT filter",
+        "the cohort-side margin, binned",
+        "`flippable`, `marginal`, `solid` or `robust`, binning the cohort-side margin "
+        "at 10%, 25% and 50% of a cut. Empty unless the verdict is `binder`."),
+    "panel_limiting_cut": ("stages 3-5 (cohort)", "derived from prediction", "annotation — does NOT filter",
+        "argmin of the three distances, panel side",
+        "Which cut holds up the PANEL-side call — the union over every cohort allele, "
+        "an upper bound rather than a result: `affinity_nM`, `rank_BA` or `rank_EL`."),
+    "gene_concordant": ("stages 3-5 (cohort)", "catalogue comparison", "annotation — does NOT filter",
+        "this sample's gene vs the catalogue's for the matched peptide",
+        "Whether the peptide is broken in the same gene on both sides of the match. "
+        "An identical sequence arising from a different gene is convergence rather "
+        "than a shared event, so this separates the two. Recorded, not enforced, in "
+        "this table."),
 
     # -- cohort comparison --------------------------------------------------
     "matched_reference": ("stages 3-5", "catalogue comparison", "verdict — does NOT filter",

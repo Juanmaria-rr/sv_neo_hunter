@@ -265,7 +265,7 @@ MEANINGS: dict[str, str] = {
     # -- expression (stage 7) --------------------------------------------
     "gene1_TPM": "Isofox gene-level TPM for `gene1`. Context: says the gene is "
                  "transcribed, not that the junction is.",
-    "gene2_TPM": "Isofox gene-level TPM for `gene2`.",
+    "gene2_TPM": "Isofox gene-level expression of the 3' partner, in transcripts per million. Both partners must clear the threshold for `expressed`.",
     "isoform1_TPM": "Isofox TPM for `transcript_id1` specifically. A gene can be "
                     "well expressed through an isoform that does not contain the "
                     "breakpoint.",
@@ -294,7 +294,7 @@ MEANINGS: dict[str, str] = {
                      "CALLER's verdict, which is stronger evidence for an "
                      "inter-chromosomal junction than hand-counted supplementary "
                      "alignments.",
-    "isofox_fusion_support": "Fragments supporting that fusion call.",
+    "isofox_fusion_support": "Fragments behind Isofox's own fusion call at this locus — an independent count to compare against `junction_reads` where both exist.",
     "retained_intron": "Retained introns Isofox reports at this locus, which "
                        "change what the transcript actually contains.",
 
@@ -559,7 +559,7 @@ MEANINGS: dict[str, str] = {
     "coverage_bp1": "Alignments in the window around breakend 1. **Context, not "
                     "evidence**: a breakpoint inside a highly expressed gene has "
                     "thousands of reads whether or not the junction exists.",
-    "coverage_bp2": "Alignments in the window around breakend 2. Context, not evidence, for the same reason as `coverage_bp1`.",
+    "coverage_bp2": "RNA alignments in the window around the 3' breakend. Context for how much signal was available there, never evidence that the junction exists.",
     "min_coverage": "The quieter of the two coverages. `min`, never `max`.",
     "softclip_bp1": "Reads whose soft clip sits at breakend 1. **Diagnostic "
                     "only — soft clips never tier an event.** A clip shows a "
