@@ -96,6 +96,19 @@ def main() -> None:
     parser.add_argument("--universe", type=pathlib.Path, required=True)
     parser.add_argument("--view", action="append", default=[],
                         help=f"one of: {', '.join(VIEWS)}, or `all`; repeatable")
+    parser.add_argument("--lines", action="append", default=[], metavar="LINE",
+                        help="restrict the universe to peptides ACQUIRED by these "
+                             "lines before computing any view; repeatable. A "
+                             "peptide acquired by a line outside the set is "
+                             "dropped entirely — including one a selected line "
+                             "would inherit, since it cannot be inherited from a "
+                             "line that is not there. The exclusion is recorded "
+                             "in every provenance file, because a subset that "
+                             "does not say which lines it dropped is "
+                             "indistinguishable from the full universe.")
+    parser.add_argument("--subset-name", default=None,
+                        help="directory name for a --lines restriction; defaults "
+                             "to the lines joined by '+'")
     parser.add_argument("--per-line", action="store_true",
                         help="also write one file per line in `present_in`, "
                              "carrying everything that line has including what "
@@ -110,9 +123,36 @@ def main() -> None:
 
     universe = pd.read_csv(args.universe, sep="\t", dtype=str, low_memory=False)
     source_sum = checksum(args.universe)
-    args.out_dir.mkdir(parents=True, exist_ok=True)
-    print(f"  universe: {len(universe):,} peptides  sha256:{source_sum}")
+    full_rows = len(universe)
+    print(f"  universe: {full_rows:,} peptides  sha256:{source_sum}")
 
+    restriction = ""
+    if args.lines:
+        known = {line for value in universe["acquired_in"].astype(str)
+                 for line in value.split(";") if line}
+        unknown = [l for l in args.lines if l not in known]
+        if unknown:
+            raise SystemExit(f"unknown line(s): {', '.join(unknown)}. "
+                             f"Present: {', '.join(sorted(known))}")
+        selected = set(args.lines)
+        keep = universe["acquired_in"].astype(str).apply(
+            lambda v: set(v.split(";")) <= selected)
+        dropped = sorted(known - selected)
+        universe = universe[keep]
+        restriction = (f"acquired_in within {{{', '.join(sorted(selected))}}}; "
+                       f"excluded {{{', '.join(dropped) or 'none'}}}. "
+                       "NOTE: `present_in` still names the excluded lines where "
+                       "they inherit a kept peptide — that is a true fact about "
+                       "the peptide and is not rewritten. Filter on "
+                       "`acquired_in` to stay inside this subset.")
+        args.out_dir = args.out_dir / (args.subset_name
+                                       or "+".join(sorted(selected)))
+        print(f"  restricted to {', '.join(sorted(selected))}: "
+              f"{len(universe):,} peptides "
+              f"(dropped {full_rows - len(universe):,} acquired by "
+              f"{', '.join(dropped)})")
+
+    args.out_dir.mkdir(parents=True, exist_ok=True)
     manifest = []
 
     def emit(subdir: pathlib.Path, name: str, subset: pd.DataFrame,
@@ -128,17 +168,30 @@ def main() -> None:
             {"key": "tool", "value": pathlib.Path(__file__).name},
             {"key": "source", "value": str(args.universe)},
             {"key": "source_sha256_16", "value": source_sum},
+            {"key": "line_restriction", "value": restriction or "none — all lines"},
             {"key": "rows", "value": len(subset)},
-            {"key": "rows_in_source", "value": len(universe)},
+            {"key": "rows_after_restriction", "value": len(universe)},
+            {"key": "rows_in_full_universe", "value": full_rows},
         ]).to_csv(subdir / f"{name}.PROVENANCE.tsv", sep="\t", index=False)
         manifest.append({"file": str(path.relative_to(args.out_dir)),
                          "view": name, "rows": len(subset),
-                         "pct_of_universe": round(100.0 * len(subset) / len(universe), 2),
+                         "pct_of_restricted": round(100.0 * len(subset) / len(universe), 2),
+                         "line_restriction": restriction or "none",
                          "source_sha256_16": source_sum,
                          "generated": date.today().isoformat()})
         print(f"    {name:<26} {len(subset):>7,}")
 
-    print("\n  views over the whole universe:")
+    # The restricted universe itself, not only its views: a subset that ships
+    # only derived cuts forces anyone asking a new question back to the full
+    # table, where the excluded lines are present again.
+    if args.lines:
+        emit(args.out_dir, "candidate_universe", universe,
+             "The candidate universe restricted to the selected lines. This is "
+             "the subset's master table; every view beside it derives from it.",
+             restriction)
+
+    print("\n  views over the restricted universe:"
+          if args.lines else "\n  views over the whole universe:")
     for name in names:
         predicate, description = VIEWS[name]
         emit(args.out_dir, name, universe[predicate(universe)], description,
@@ -147,6 +200,12 @@ def main() -> None:
     if args.per_line:
         lines = sorted({line for value in universe["present_in"].astype(str)
                         for line in value.split(";") if line})
+        if args.lines:
+            # A line outside the restriction still appears in `present_in`,
+            # because it inherits what the selected lines acquired — and after
+            # the restriction it carries exactly what its parent does, so its
+            # directory would be a duplicate under a name the subset excludes.
+            lines = [line for line in lines if line in set(args.lines)]
         for line in lines:
             print(f"\n  {line} (everything it carries, inherited included):")
             held = universe[carries(universe, line)]
