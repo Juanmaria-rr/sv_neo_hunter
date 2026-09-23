@@ -61,6 +61,21 @@ JUNCTION_COLUMNS = [
     "vf_bp1", "vf_bp2", "qual_bp1", "qual_bp2", "segmapq_bp1", "segmapq_bp2",
     "expressed", "min_side_TPM", "rna_tier", "junction_reads", "test",
     "test_reason",
+    # The junction evidence BROKEN DOWN BY MECHANISM, not just its total. Three
+    # mechanisms answer the same question by different routes, and which one
+    # produced a count is diagnostic: an event whose reads are all `ngap` and
+    # none `sa` is consistent with splicing at that position, not with a genomic
+    # junction. A splicing artefact caught during development had exactly that
+    # shape: thousands of reads, all by N gap, on a handful of DNA fragments.
+    "junction_by_ngap", "junction_by_sa", "junction_by_insert",
+    "coverage_bp1", "coverage_bp2", "min_coverage",
+    "softclip_bp1", "softclip_bp2",
+    "alignments_bp1", "alignments_bp2", "low_mapq_bp1", "low_mapq_bp2",
+    # Size of the lesion. `event_size` is type-aware and `span` is the raw
+    # coordinate difference; they disagree whenever an insertion is involved,
+    # which is the point — `span` alone reported a 34 bp insertion as a 2 bp
+    # deletion. Both are carried so the disagreement stays visible.
+    "span", "event_size", "insert_len",
     # Isofox's own splice calls, independent of this pipeline's read counting.
     # They are here because they catch a confound nothing else does: an SV whose
     # breakpoints sit beside a splice site in a highly expressed gene inherits

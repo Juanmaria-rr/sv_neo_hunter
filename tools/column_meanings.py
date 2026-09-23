@@ -203,9 +203,10 @@ MEANINGS: dict[str, str] = {
                  "nothing without `panel_size_estimate`. Empty means absent from "
                  "the panel, which passes (`PON_ABSENT_MEANS`).",
     "pon_fraction": "`pon_count` as a fraction of the panel — the interpretable "
-                    "form. `PON_MAX = 10` against this ~12,000-sample panel is "
-                    "'seen in under 0.08% of normals'; the same 10 against a "
-                    "50-sample panel would be 'under 20%'.",
+                    "form. The same `PON_MAX = 10` means 'seen in well under "
+                    "1% of normals' against a panel of many thousands, and 'seen "
+                    "in a fifth of them' against a panel of fifty. Always read "
+                    "the count against `panel_size_estimate`.",
     "panel_size_estimate": "Largest `PON_COUNT` observed anywhere in this VCF, "
                            "used as the panel-size denominator. An estimate: the "
                            "true panel size is not recorded in the VCF.",
@@ -271,8 +272,9 @@ MEANINGS: dict[str, str] = {
     "isoform2_TPM": "Isofox TPM for `transcript_id2`.",
     "min_side_TPM": "The lower of the two sides' TPM. `min`, never `max`: an "
                     "event is in transcribed territory only if BOTH ends are. "
-                    "Taking the maximum once reported a silent locus carrying 3 "
-                    "reads as having 8,913 — the count belonged to its partner.",
+                    "Taking the maximum once reported a silent locus as being "
+                    "covered by thousands of reads — the count belonged to its "
+                    "transcribed partner, three orders of magnitude away.",
     "expressed": "`min_side_TPM >= TPM_EXPRESSED` (1.0). Context for the junction "
                  "test, not evidence for it.",
 
@@ -440,7 +442,7 @@ MEANINGS: dict[str, str] = {
     # Two of them mislead if read at face value; see the entries.
     "gene2_x": "The 3' partner gene from THIS sample's annotation. A pandas "
                "merge suffix, and an exact duplicate of `gene2` — verified "
-               "identical in 38,391 of 38,391 rows. Kept only because removing "
+               "identical in every row of a full run. Kept only because removing "
                "it would change existing column positions; use `gene2`.",
     "gene2_y": "The 3' partner gene recorded in the CATALOGUE for this peptide, "
                "as opposed to `gene2_x`/`gene2` which come from this sample. "
@@ -538,6 +540,140 @@ MEANINGS: dict[str, str] = {
                               "verdict available.",
     "binds_autologous_robust": "At least one robust autologous binder in this "
                                "event.",
+
+    # -- junction evidence, broken down by mechanism -----------------------
+    # Counted by this pipeline directly from the RNA BAM with pysam, NOT taken
+    # from Isofox. Isofox's own calls (`alt_sj_*`, `isofox_fusion*`) are separate
+    # columns and are independent of these — which is why they can disagree, and
+    # why that disagreement is informative rather than a bug.
+    "junction_by_ngap": "Fragments supporting the junction via a CIGAR `N` gap "
+                        "matching the event size and position. `N` (skip), not "
+                        "`D` (deletion): searching for `D` found zero reads "
+                        "across a 221 bp deletion where `N` found 31. **Reads "
+                        "counted only here, with none by `sa`, is the shape "
+                        "splicing makes** — check `nearest_alt_sj_bp`.",
+    "junction_by_sa": "Fragments supporting it via a supplementary alignment "
+                      "landing near the partner breakend. The mechanism for "
+                      "chimeric junctions, where no single read carries a gap.",
+    "junction_by_insert": "Fragments supporting it via an inserted sequence.",
+    "coverage_bp1": "Alignments in the window around breakend 1. **Context, not "
+                    "evidence**: a breakpoint inside a highly expressed gene has "
+                    "thousands of reads whether or not the junction exists.",
+    "coverage_bp2": "Alignments in the window around breakend 2. Context, not evidence, for the same reason as `coverage_bp1`.",
+    "min_coverage": "The quieter of the two coverages. `min`, never `max`.",
+    "softclip_bp1": "Reads whose soft clip sits at breakend 1. **Diagnostic "
+                    "only — soft clips never tier an event.** A clip shows a "
+                    "read ENDS at the breakpoint; it says nothing about where "
+                    "the rest of it went.",
+    "softclip_bp2": "Reads whose soft clip sits at breakend 2. Diagnostic only, like `softclip_bp1`: a clip shows where a read ends, not where it goes.",
+    "alignments_bp1": "Alignment records examined at breakend 1, before the "
+                      "mapping-quality cut.",
+    "alignments_bp2": "Alignment records examined at breakend 2, before the mapping-quality cut.",
+    "low_mapq_bp1": "Alignments discarded at breakend 1 for ambiguous placement. "
+                    "A high share means the region is repetitive.",
+    "low_mapq_bp2": "Alignments discarded at breakend 2 for ambiguous placement. A high share means that end sits in repetitive sequence.",
+
+    # -- lesion size -------------------------------------------------------
+    "span": "Raw coordinate difference between the breakends, |pos2 - pos1|. "
+            "**Not the lesion size** when an insertion is involved: a 34 bp "
+            "insertion once read as a 2 bp deletion because the span was taken "
+            "for the lesion. Compare with `event_size`.",
+    "event_size": "Type-aware lesion size: the deleted, duplicated or inserted "
+                  "length as the SV type implies, rather than the coordinate "
+                  "span. Undefined (empty) for BND/TRA/SGL, where size is not a "
+                  "meaningful quantity.",
+    "insert_len": "Inserted bases at the junction. Non-zero here is why `span` "
+                  "and `event_size` can disagree.",
+
+    # -- common fragile sites ----------------------------------------------
+    # Annotated against TWO catalogues on purpose: published definitions differ
+    # by two orders of magnitude in how much genome they call fragile, so a hit
+    # under one and not the other is the useful signal.
+    "cfs_narrow_bp1": "Fragile site containing breakend 1 under the CONSERVATIVE "
+                      "catalogue (~1% of the genome). Empty = not inside one.",
+    "cfs_narrow_bp2": "Fragile site containing breakend 2 under the conservative catalogue. Empty = not inside one. The two ends are annotated separately because they can fall on different sides of a boundary.",
+    "cfs_narrow_tier_bp1": "`core` or `extended` region of that catalogue, at "
+                           "breakend 1.",
+    "cfs_narrow_tier_bp2": "`core` or `extended` region of the conservative catalogue, at breakend 2.",
+    "cfs_narrow_status": "`none` / `bp1` / `bp2` / `both` — which ends fall "
+                         "inside. Kept per end rather than collapsed to a "
+                         "boolean: one end deep inside a fragile site and the "
+                         "other far outside is a different claim from both ends "
+                         "inside.",
+    "cfs_broad_bp1": "Fragile site containing breakend 1 under the PERMISSIVE "
+                     "catalogue. **That catalogue covers ~65% of the genome, so "
+                     "a hit here is close to the null expectation and is not "
+                     "evidence on its own.**",
+    "cfs_broad_bp2": "Fragile site containing breakend 2 under the permissive catalogue, whose large genome footprint makes a hit close to the chance expectation.",
+    "cfs_broad_status": "`none` / `bp1` / `bp2` / `both` under the permissive "
+                        "catalogue.",
+    "cfs_agreement": "`both`, `narrow_only`, `broad_only` or `neither`. "
+                     "**`broad_only` is the weak class** — a hit the "
+                     "conservative catalogue does not support, and one the "
+                     "permissive catalogue's genome footprint makes near-certain "
+                     "by chance. Test any hit rate against the junctions that "
+                     "produced no candidate, never against a uniform genome.",
+
+    # -- lineage and candidate universe ------------------------------------
+    # Written by tools/build_candidate_universe.py. Kept here rather than in that
+    # script so a column cannot mean one thing in the universe and another in a
+    # table derived from it.
+    "acquired_in": "The line whose OWN variant calls produce this peptide — where "
+                   "it entered the lineage. Semicolon-separated if two lines "
+                   "generate the same sequence independently. Use this to ask "
+                   "'what did this knockout add'.",
+    "present_in": "Every line carrying the peptide: the acquiring line plus all "
+                  "its descendants, since a clone inherits its parent's genome. "
+                  "**Use this to ask 'what can line X present'** — filtering on "
+                  "`acquired_in` silently drops everything the line inherited.",
+    "n_lines_present": "How many lines carry it; 1 means private to one branch "
+                       "of the lineage.",
+    "matched_reference": "Whether the peptide also appears in the reference "
+                         "cohort. **In the candidate universe this is an "
+                         "annotation, never a selection.** When False every "
+                         "cohort-side column is empty because the question was "
+                         "not asked, not because the answer was no.",
+
+    # -- presentability by the sample's OWN genotype ------------------------
+    # Distinct from the cohort-side `autologous_*` columns, which ask the same
+    # thing of a catalogue patient's genotype. Sharing a name would invite the
+    # conflation the panel/autologous distinction exists to prevent.
+    "presentable": "Binds at least one allele of the cell line's OWN class I "
+                   "genotype. For a cell line there is no panel/autologous "
+                   "ambiguity: the alleles ARE its own, so this means the cell "
+                   "could present the peptide. Predicted binding, never observed "
+                   "presentation.",
+    "n_alleles_binding": "How many of the line's own alleles it binds.",
+    "binding_alleles": "Which of the line's own alleles bind it, `;`-separated.",
+    "presentation_best_allele": "The line's allele giving the largest margin.",
+    "presentation_margin": "How far inside the binder definition the call sits: "
+                           "the distance to each of the three cuts as a fraction "
+                           "of that cut, the smallest of the three, then the "
+                           "largest across binding alleles. 0 is exactly on a "
+                           "boundary. Scales are mixed on purpose, so it ranks "
+                           "fragility rather than estimating a flip probability.",
+    "presentation_limiting_cut": "Which of the three cuts is closest to failing.",
+    "presentation_robustness": "`presentation_margin` binned: `flippable` (<=10% "
+                               "of a cut), `marginal` (<=25%), `solid` (<=50%), "
+                               "`robust` (>50%). Not a stricter biological claim "
+                               "— the same criterion minus the calls a re-run or "
+                               "a predictor change would flip.",
+
+    # -- cohort-side verdicts, renamed apart -------------------------------
+    "binds_autologous_patient": "The COHORT-side verdict: binds an allele of a "
+                                "catalogue patient who carries this peptide. "
+                                "Distinct from `presentable`, which is this cell "
+                                "line's own genotype. Empty unless "
+                                "`matched_reference`.",
+    "autologous_verdict_patient": "Cohort-side verdict: `binder`, `non_binder` or "
+                                  "one of the `unevaluable_*` states. "
+                                  "Unevaluable is NOT non-binder.",
+    "autologous_margin_patient": "Cohort-side margin, defined as "
+                                 "`presentation_margin` but over a patient's "
+                                 "alleles.",
+    "autologous_limiting_cut_patient": "Cohort-side limiting cut.",
+    "autologous_best_allele_patient": "Cohort-side presenting allele.",
+    "autologous_robustness_patient": "Cohort-side robustness bin.",
 }
 
 
@@ -550,11 +686,11 @@ CRITERION_SUFFIXES = {
                    "4.2's CEDAR neoepitope head) instead of the three-way "
                    "EL/BA rule. No cut is established for that head; 0.5 is "
                    "netMHCpan's generic strong-binder convention applied to it, "
-                   "chosen because it is of comparable stringency (25,340 rows "
-                   "against the three-way rule's 29,097). **Not comparable with "
-                   "the earlier analysis.**",
-    "_neo_weak": "under the **neo_weak** rule (`%Rank_Neo <= 2`), which is much "
-                 "more permissive — 107,698 rows against 29,097. **Not "
+                   "chosen because it passes a comparable number of "
+                   "peptide-allele rows to the three-way rule. **Not comparable "
+                   "with the earlier analysis.**",
+    "_neo_weak": "under the **neo_weak** rule (`%Rank_Neo <= 2`), which is "
+                 "several times more permissive than the three-way rule. **Not "
                  "comparable with the earlier analysis.**",
 }
 

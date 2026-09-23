@@ -66,6 +66,16 @@ PEPTIDE_COLUMNS = [
     "gnomad_af_popmax", "pass_gnomad", "is_private", "privacy_note",
     "gene1_TPM", "gene2_TPM", "min_side_TPM", "expressed", "rna_tier",
     "junction_reads", "test", "test_reason",
+    # Junction evidence broken down by mechanism, and the lesion size. Which
+    # mechanism produced a count is diagnostic — reads all from N gaps and none
+    # from supplementary alignments is the shape splicing makes — and
+    # `event_size` is type-aware where `span` is the raw coordinate difference,
+    # so the two disagree whenever an insertion is involved.
+    "junction_by_ngap", "junction_by_sa", "junction_by_insert",
+    "coverage_bp1", "coverage_bp2", "min_coverage",
+    "softclip_bp1", "softclip_bp2",
+    "alignments_bp1", "alignments_bp2", "low_mapq_bp1", "low_mapq_bp2",
+    "span", "event_size", "insert_len",
     "nearest_alt_sj_bp", "alt_sj_frags", "alt_sj_type", "alt_sj_within_window",
     "retained_intron", "isofox_fusion", "isofox_fusion_support",
     "presentable", "n_alleles_binding", "binding_alleles",
