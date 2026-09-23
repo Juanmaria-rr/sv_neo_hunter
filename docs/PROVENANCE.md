@@ -17,17 +17,17 @@ this repository:
 
 | Candidate | Geometry | Coverage, breakend 1 | Coverage, breakend 2 | Reads crossing the junction | Verdict |
 |---|---|---|---|---|---|
-| A | inter-chromosomal | 3 | 8,913 | 0 | not supported |
-| B | 2 bp deletion, 34 bp insertion | 468 | 467 | 0 | untestable by a gap test |
-| C | 220 bp deletion | 2,372 | 2,367 | 31 | supported, but `PON_COUNT` 3,513 |
+| A | inter-chromosomal | a handful | thousands | none | not supported |
+| B | 2 bp deletion, 34 bp insertion | hundreds | hundreds | none | untestable by a gap test |
+| C | 220 bp deletion | thousands | thousands | tens | supported, but seen in thousands of normals |
 
 None survives. Candidate A's supporting reads were soft-clipped reads whose
 supplementary alignments landed 3–156 Mb from the partner breakend — they end
 near the breakpoint and demonstrably do not cross it. Candidate B is a 2 bp event
 that no CIGAR gap test can evaluate, and whose real lesion is a 34 bp insertion
-misrepresented by breakend geometry. Candidate C is genuine: 31 crossing reads,
+misrepresented by breakend geometry. Candidate C is genuine: tens of crossing reads,
 and a homozygous-deletion depth profile in the matched DNA — and it is present in
-3,513 unrelated normals, so it is a common polymorphism rather than a private
+thousands of unrelated normals, so it is a common polymorphism rather than a private
 event.
 
 A general lesson followed, and is enforced structurally: **a conclusion must not
@@ -42,7 +42,7 @@ manifest and generator version that produced it.
 |---|---|
 | `SOFTCLIPS_TIER_EVENTS = False` | "split reads" supporting candidate A were clipped reads whose supplementary alignments pointed megabases away from the partner |
 | `COVERAGE_TIERS_EVENTS = False` | promoting on coverage alone marks any breakpoint inside an expressed gene as validated |
-| `COVERAGE_SUMMARY = "min"` | taking the maximum reported candidate A's silent locus (3 reads) as having 8,913, the partner's count |
+| `COVERAGE_SUMMARY = "min"` | taking the maximum reported candidate A's silent locus as having the partner's count, three orders of magnitude out |
 | `MIN_TESTABLE_GAP_SIZE = 20` | 2–3 bp events were recorded as negative by a test that cannot apply; aligners emit no `N` operation below their minimum intron |
 | insertion test precedes the gap test | candidate B: breakend span 3, deleted length 2, inserted 34 bases — the span is not the lesion |
 | `SA_PARTNER_TOLERANCE = 1000` | matching only the partner chromosome accepted alignments 3–156 Mb from the breakend |

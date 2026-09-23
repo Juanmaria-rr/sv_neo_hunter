@@ -23,8 +23,8 @@ from svneo import confidence, criteria, generators, rna, null_model, vcf  # noqa
 def test_coverage_alone_never_reaches_a_supported_tier():
     """A breakpoint in a highly expressed gene has thousands of reads whether or
     not the junction exists. The workflow this replaces promoted such events to
-    MODERATE on coverage alone, which is how a silent locus with 8,913 reads at
-    its PARTNER became 'RNA-validated'."""
+    MODERATE on coverage alone, which is how a silent locus whose PARTNER carried
+    thousands of reads became 'RNA-validated'."""
     assert rna.rna_tier(junction_reads=0, testable=True) == "NONE"
 
 

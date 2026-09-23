@@ -192,9 +192,9 @@ supplementary alignments landed 3–156 Mb from the partner breakend; no read
 connected the two loci at all.
 
 **2. Coverage is summarised across breakends with `min`, never `max`.** An event is in
-transcribed territory only if both ends are. Taking the maximum reported a silent
-locus carrying 3 reads as having 8,913 — the count belonged to its highly
-expressed partner.
+transcribed territory only if both ends are. Taking the maximum reported a locus
+carrying a handful of reads as having thousands — the count belonged to its highly
+expressed partner, three orders of magnitude away.
 
 **3. An event with no valid test is `UNTESTABLE`, not `NONE`.** `NONE` asserts
 "tested and negative". A 2 bp deletion cannot produce a CIGAR `N` gap, because

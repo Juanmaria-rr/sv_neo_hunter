@@ -404,7 +404,8 @@ COVERAGE_TIERS_EVENTS = False
 
 #: Coverage is summarised across breakends with `min`, never `max`. An event is
 #: in transcribed territory only if BOTH ends are. Using `max` reported a silent
-#: locus (3 reads) as having 8,913 because its partner was highly expressed.
+#: locus as having thousands of reads — three orders of magnitude out — because
+#: its partner was highly expressed.
 COVERAGE_SUMMARY = "min"
 
 
