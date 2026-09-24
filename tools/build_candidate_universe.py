@@ -29,7 +29,7 @@ any downstream statistic. Instead:
                  X present".
 
 So "candidates in clone_A" is `present_in` containing clone_A, which
-includes what it inherited; "what the TP53 knockout added" is `acquired_in`.
+includes what it inherited; "what a given knockout added" is `acquired_in`.
 
 Usage
 -----
@@ -67,10 +67,11 @@ PEPTIDE_COLUMNS = [
     "gene1_TPM", "gene2_TPM", "min_side_TPM", "expressed", "rna_tier",
     "junction_reads", "test", "test_reason",
     # Junction evidence broken down by mechanism, and the lesion size. Which
-    # mechanism produced a count is diagnostic — reads all from N gaps and none
-    # from supplementary alignments is the shape splicing makes — and
-    # `event_size` is type-aware where `span` is the raw coordinate difference,
-    # so the two disagree whenever an insertion is involved.
+    # mechanism produced a count says which geometry the junction has, not
+    # whether it is real: an N-gap population is what BOTH a deleted allele and
+    # an alternative splice junction produce. `event_size` is type-aware where
+    # `span` is the raw coordinate difference, so the two disagree whenever an
+    # insertion is involved.
     "junction_by_ngap", "junction_by_sa", "junction_by_insert",
     "coverage_bp1", "coverage_bp2", "min_coverage",
     "softclip_bp1", "softclip_bp2",

@@ -65,8 +65,10 @@ JUNCTION_COLUMNS = [
     # mechanisms answer the same question by different routes, and which one
     # produced a count is diagnostic: an event whose reads are all `ngap` and
     # none `sa` is consistent with splicing at that position, not with a genomic
-    # junction. A splicing artefact caught during development had exactly that
-    # shape: thousands of reads, all by N gap, on a handful of DNA fragments.
+    # junction. It does NOT settle whether the junction is genomic: a transcript
+    # from a deleted allele and an alternative splice junction both produce N
+    # gaps, and neither the count nor its ratio to the DNA support tells them
+    # apart. Only DNA depth across the interval does — see validate_junction.py.
     "junction_by_ngap", "junction_by_sa", "junction_by_insert",
     "coverage_bp1", "coverage_bp2", "min_coverage",
     "softclip_bp1", "softclip_bp2",

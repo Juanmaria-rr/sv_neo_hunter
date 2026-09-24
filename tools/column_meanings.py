@@ -280,11 +280,16 @@ MEANINGS: dict[str, str] = {
 
     # -- independent RNA evidence from the quantifier ---------------------
     "nearest_alt_sj_bp": "Distance in bp to the nearest novel splice junction "
-                         "Isofox called. A breakpoint coinciding with one is "
-                         "transcribed through a rearranged structure that a CIGAR "
-                         "gap at a fixed offset can miss.",
+                         "Isofox called. **A small distance is not evidence "
+                         "against the junction**: a transcript from a deleted "
+                         "allele looks like a novel intron to a splice-aware "
+                         "tool, so the call is expected whether or not the lesion "
+                         "is genomic. DNA depth across the interval is what "
+                         "separates them.",
     "alt_sj_frags": "Fragments supporting that novel splice junction, as counted "
-                    "by Isofox — independent of our own read counting.",
+                    "by Isofox — independent of our own read counting. Not to be "
+                    "divided by the DNA support: that ratio tracks expression, "
+                    "not artefact.",
     "alt_sj_type": "Isofox's classification of it, e.g. `NOVEL_INTRON`, "
                    "`NOVEL_EXON`.",
     "alt_sj_within_window": "The novel splice junction is within "
@@ -330,6 +335,18 @@ MEANINGS: dict[str, str] = {
     "junction_reads": "**The evidence.** Unique fragments actually crossing the "
                       "junction, by whichever test applies. This is the only "
                       "quantity that tiers an event.",
+    "junction_alt_reads": "Fragments crossing the SAME interval WITHOUT using the "
+                          "candidate junction — the competing outcome on its own. "
+                          "Excludes `junction_reads`, so it is not a denominator: "
+                          "dividing by it gives odds, not a percentage.",
+    "junction_interval_total": "`junction_reads` + `junction_alt_reads`: every "
+                               "gapped fragment crossing the interval, the "
+                               "candidate junction included. Including it is what "
+                               "makes this the valid denominator for a share.",
+    "junction_usage": "`junction_reads` / `junction_interval_total`. What fraction "
+                      "of transcripts through this interval use the lesion; ~0.5 "
+                      "for a heterozygous deletion transcribed like the intact "
+                      "allele. Empty, not 0, unless `test` == `sizegap`.",
     "junction_by_ngap": "Of those, how many were found as a CIGAR `N` gap "
                         "matching the deletion, within "
                         "`NGAP_POSITION_TOLERANCE`/`NGAP_SIZE_TOLERANCE`.",
@@ -548,10 +565,13 @@ MEANINGS: dict[str, str] = {
     # why that disagreement is informative rather than a bug.
     "junction_by_ngap": "Fragments supporting the junction via a CIGAR `N` gap "
                         "matching the event size and position. `N` (skip), not "
-                        "`D` (deletion): searching for `D` found zero reads "
-                        "across a 221 bp deletion where `N` found 31. **Reads "
-                        "counted only here, with none by `sa`, is the shape "
-                        "splicing makes** — check `nearest_alt_sj_bp`.",
+                        "`D` (deletion): a search for `D` finds nothing across a "
+                        "deletion that `N` detects. **An N-gap population does "
+                        "not by itself mean the junction is genomic** — a "
+                        "transcript from a deleted allele and an alternative "
+                        "splice junction look the same against a reference that "
+                        "still carries the sequence. DNA depth across the "
+                        "interval is what separates them.",
     "junction_by_sa": "Fragments supporting it via a supplementary alignment "
                       "landing near the partner breakend. The mechanism for "
                       "chimeric junctions, where no single read carries a gap.",
@@ -613,6 +633,18 @@ MEANINGS: dict[str, str] = {
                      "permissive catalogue's genome footprint makes near-certain "
                      "by chance. Test any hit rate against the junctions that "
                      "produced no candidate, never against a uniform genome.",
+
+    # -- IGV navigation ------------------------------------------------------
+    # Written with the BAM's contig naming, not the table's: these tables carry
+    # `1` while the alignments carry `chr1`, and IGV searches the loaded genome.
+    "igv_locus": "Paste-ready IGV locus covering the whole junction, padded by a "
+                 "quarter of the event size on each side so the flanks needed to "
+                 "judge a depth change are on screen. For an inter-chromosomal "
+                 "junction it holds TWO loci separated by a space, which opens "
+                 "IGV's split view — no single window can show both ends.",
+    "igv_bp1": "The 5' breakend alone, with a small fixed window. Use it when the "
+               "whole-junction view is too zoomed out to draw individual reads.",
+    "igv_bp2": "The 3' breakend alone, likewise.",
 
     # -- lineage and candidate universe ------------------------------------
     # Written by tools/build_candidate_universe.py. Kept here rather than in that
