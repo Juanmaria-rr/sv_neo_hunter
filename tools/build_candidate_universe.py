@@ -63,7 +63,7 @@ PEPTIDE_COLUMNS = [
     "spans_junction", "junction_aa", "low_complexity", "is_self",
     "sv_hc", "vf_bp1", "vf_bp2", "ref_bp1", "ref_bp2",
     "qual_bp1", "qual_bp2", "segmapq_bp1",
-    "segmapq_bp2", "pon_count", "pon_fraction", "pass_pon", "gnomad_af_used",
+    "segmapq_bp2", "pon_count", "pass_pon", "gnomad_af_used",
     "gnomad_af_popmax", "pass_gnomad", "privacy_note",
     # Every ancestry group, not only the maximum. `popmax` is a maximum over
     # nine groups, so it is biased upwards by construction and, worse, it hides

@@ -17,7 +17,27 @@ its own column, and the reader sees the disagreement instead of inheriting a
 resolution of it.
 
   is_highfreq_gnomad   gnomad_af_popmax >= POPULATION_COMMON_AF
-  is_highfreq_panel    pon_fraction     >= POPULATION_COMMON_AF
+
+WHY THERE IS NO PANEL EQUIVALENT
+--------------------------------
+There was one, computed from `pon_fraction`, and it has been withdrawn along
+with that column. `pon_fraction` was `PON_COUNT` divided by the largest
+`PON_COUNT` in the same VCF, because the true size of the panel is not
+published: neither the hmftools resource documentation nor the VCF header
+states how many samples it was built from, and the field is defined only as
+"PON count if in PON".
+
+Two things follow. The denominator is per-sample — it depends on how many
+junctions that sample happened to call — so the fraction was not comparable
+between lines: the same count gave 8.4% in one and 27.6% in another. And the
+largest count observed, 11,912, exceeds every published size of the cohort the
+panel is built from (2,399 to ~8,000 patients), so `PON_COUNT` is very unlikely
+to be a count of individuals at all.
+
+A number that is neither a frequency nor comparable between samples cannot
+support a threshold, so `PON_COUNT` is carried as the raw count it is and the
+population-frequency verdict rests on gnomAD, which publishes allele
+frequencies with known denominators per ancestry group.
 
 THE TWO ABSENCES ARE NOT THE SAME, THOUGH BOTH READ AS FALSE
 ------------------------------------------------------------
@@ -53,7 +73,7 @@ from svneo import criteria as C                            # noqa: E402
 #: renamed: the replacement columns have the OPPOSITE polarity (True now means
 #: common, where `is_private` True meant keep), so anything still filtering on
 #: the old name must fail loudly instead of silently selecting the complement.
-RETIRED = "is_private"
+RETIRED = ["is_private", "pon_fraction", "is_highfreq_panel"]
 
 
 def main() -> None:
@@ -69,33 +89,25 @@ def main() -> None:
 
     table = pd.read_csv(args.table, sep="\t", dtype=str, low_memory=False)
     print(f"  table: {len(table):,} rows, {len(table.columns)} columns")
-    print(f"  threshold: {args.threshold:.2%} "
-          f"(~{args.threshold * 11912:.0f} genomes in a panel of ~11,912)")
+    print(f"  threshold: {args.threshold:.2%} of gnomAD popmax")
 
     popmax = pd.to_numeric(table.get("gnomad_af_popmax"), errors="coerce")
-    fraction = pd.to_numeric(table.get("pon_fraction"), errors="coerce")
-
-    # fillna(0) on each, for different reasons stated in the docstring above.
     table["is_highfreq_gnomad"] = (popmax.fillna(0) >= args.threshold)
-    table["is_highfreq_panel"] = (fraction.fillna(0) >= args.threshold)
 
     junctions = table.drop_duplicates(["chrom1", "pos1", "pos2"])
     g = junctions["is_highfreq_gnomad"]
-    p = junctions["is_highfreq_panel"]
+    no_record = pd.to_numeric(junctions["gnomad_af_popmax"], errors="coerce").isna()
     print(f"\n  per distinct junction ({len(junctions):,}):")
     print(f"    common in gnomAD              {g.sum():>5}")
-    print(f"      of which no gnomAD record   "
-          f"{int((~g & pd.to_numeric(junctions['gnomad_af_popmax'], errors='coerce').isna()).sum()):>5} "
-          f"are False for lack of a record, not for being rare")
-    print(f"    common in the panel           {p.sum():>5}")
-    print(f"    common in BOTH                {(g & p).sum():>5}")
-    print(f"    common in NEITHER             {(~g & ~p).sum():>5}")
-    print(f"    disagree                      {(g ^ p).sum():>5}")
+    print(f"    not common                    {(~g & ~no_record).sum():>5}")
+    print(f"    no gnomAD record at all       {no_record.sum():>5}  "
+          f"(False for lack of a record, not for being rare)")
 
-    if RETIRED in table.columns and not args.keep_retired:
-        was = table[RETIRED].astype(str).str.lower().eq("true").sum()
-        table = table.drop(columns=[RETIRED])
-        print(f"\n  dropped `{RETIRED}` ({was:,} rows had it True)")
+    if not args.keep_retired:
+        for column in RETIRED:
+            if column in table.columns:
+                table = table.drop(columns=[column])
+                print(f"  dropped `{column}`")
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     table.to_csv(args.out, sep="\t", index=False, lineterminator="\n")
@@ -109,15 +121,14 @@ def main() -> None:
             "POPULATION_COMMON_AF in criteria.py — 1%, the classical "
             "polymorphism/rare-variant line. ACMG/AMP stand-alone benign sits at "
             "5% but answers a different question."},
-        {"key": "retired_column", "value": RETIRED},
+        {"key": "retired_columns", "value": ", ".join(RETIRED)},
         {"key": "note", "value":
-            "Absent gnomAD record and absent panel count both read as False, but "
-            "they are different states: the panel is a closed screened set so "
-            "absence is a measured zero, while gnomAD is external and absence can "
-            "mean the event is not comparably represented. gnomad_af_popmax being "
-            "empty distinguishes them. Panel coverage is near-complete for DEL and "
-            "DUP and partial for TRA/INV; no t2tINV junction has ever matched the "
-            "panel, so for that type absence is uninformative."},
+            "False covers both 'gnomAD says rare' and 'gnomAD has no record'; "
+            "gnomad_af_popmax being empty distinguishes them. pon_fraction and its "
+            "verdict were withdrawn: its denominator is the largest PON_COUNT in "
+            "the same VCF, which is per-sample and not the panel size, and the "
+            "largest count observed exceeds every published size of the cohort the "
+            "panel is built from. PON_COUNT is carried as a raw count."},
     ]).to_csv(args.out.parent / "POPULATION_FREQUENCY_PROVENANCE.tsv",
               sep="\t", index=False)
 

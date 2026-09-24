@@ -296,16 +296,24 @@ SPEC: dict[str, tuple] = {
 
     # -- stage 6, is it the sample's own? ----------------------------------
     "pon_count": ("stage 6", "DNA — cohort of normals", "measurement", "panel-of-normals annotation",
-        f"**In how many unrelated normal genomes has this junction been seen?** An "
-        f"ABSOLUTE count, not a frequency — read it against `panel_size_estimate`, "
+        f"**The caller's PON_COUNT: how many times this junction was matched in the "
+        f"panel of normals.** An ABSOLUTE count and NOT a frequency. It cannot be "
+        f"converted into one here, because **the size of the panel is not published** "
+        f"— neither the hmftools resource documentation nor the VCF header states how "
+        f"many samples it was built from, and the field is defined only as 'PON count "
+        f"if in PON'. A derived `pon_fraction` existed and was withdrawn: its "
+        f"denominator was the largest count in the same VCF, which is per-sample and "
+        f"not the panel size. **It may not even count individuals**: the largest count "
+        f"observed here, 11,912, exceeds every published size of the cohort the panel "
+        f"is built from (2,399 to about 8,000 patients), so it is more likely counting "
+        f"breakpoint observations than carriers. Use it as an ORDINAL: a count in the "
+        f"thousands against a minimum of 1 does separate recurrent from private, and "
+        f"that ordering is sound even though the units are not. For population "
+        f"frequency with a known denominator, use the gnomAD columns. "
         f"since the same count means opposite things against panels of different "
         f"sizes. Threshold `PON_MAX = {C.PON_MAX}`, applied on the PON10 branch "
         f"only. Empty counts as {C.PON_ABSENT_MEANS}, because treating absent as high "
         "would discard the cleanest breakends."),
-    "pon_fraction": ("stage 6", "DNA — cohort of normals", "measurement", "pon_count / panel size",
-        "`pon_count` expressed as a fraction of the panel — the interpretable form. "
-        "A given raw count means opposite things against panels of different sizes, "
-        "so quote this alongside it."),
     "pass_pon": ("stage 6", "DNA — cohort of normals", "verdict — does NOT filter here",
         "pon_count vs PON_MAX", f"True when this junction was seen in fewer than {C.PON_MAX} of the "
         f"normal genomes in the panel (`pon_count < {C.PON_MAX}`) — that is, when it "
@@ -344,29 +352,13 @@ SPEC: dict[str, tuple] = {
         f"**False also when gnomAD has no record at all** — which is 407 of the 783 "
         f"distinct junctions here, so a False is more often 'gnomAD has never seen "
         f"this' than 'gnomAD says it is rare'. `gnomad_af_popmax` being empty is what "
-        f"tells the two apart, and `is_highfreq_panel` is the column that catches what "
-        f"gnomAD does not know. **Note the polarity: True means COMMON, so True is the "
+        f"tells the two apart; for a junction gnomAD has never seen, `pon_count` is the "
+        f"only recurrence evidence there is, as an ordinal rather than a frequency. "
+        f"**Note the polarity: True means COMMON, so True is the "
         f"reason to set a candidate aside** — the opposite of the retired `is_private`. "
         f"The threshold barely matters here: gnomAD popmax is strongly bimodal in this "
         f"catalogue (283 of 376 above 25%), and moving the cut from 0.1% to 2% changes "
         f"the verdict on 5 junctions. Does not filter."),
-    "is_highfreq_panel": ("stage 6", "DNA — derived verdict", "verdict — does NOT filter",
-        "pon_fraction vs POPULATION_COMMON_AF",
-        f"**Is this junction an ordinary polymorphism according to the panel of "
-        f"normals?** True when `pon_fraction` >= {C.POPULATION_COMMON_AF:.0%}, about "
-        f"119 genomes in a panel of ~11,912. Absence from the panel is a MEASURED "
-        f"zero and reads as False: the panel is a closed set that this pipeline "
-        f"screened, so a junction not in it was looked for and not found "
-        f"(`PON_ABSENT_MEANS`). That is a stronger claim than an absent gnomAD record, "
-        f"which is external and may simply not represent the event comparably. "
-        f"**Unlike the gnomAD column this one IS sensitive to the threshold**: the "
-        f"panel fractions are continuous with no natural gap, and moving the cut from "
-        f"1% to 5% changes the verdict on 47 junctions, so `pon_fraction` is carried "
-        f"beside it for anyone who wants a different line. **Caveat by SV type:** the "
-        f"panel covers DEL (84% of them matched) and DUP (93%) well and TRA/INV "
-        f"partially; no `t2tINV` junction has ever matched it, so for that type a "
-        f"False means the panel has nothing to say. **True means COMMON.** "
-        f"Does not filter."),
     "pass_gnomad": ("stage 6", "DNA — population database", "verdict — does NOT filter",
         "gnomad_af_used vs GNOMAD_MAX_AF",
         f"True when the junction is rarer in the general population than "
