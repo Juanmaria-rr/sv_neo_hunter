@@ -274,9 +274,16 @@ SPEC: dict[str, tuple] = {
         "evaluated**, which is not the same as rare — inter-chromosomal junctions are "
         "left unmatched because gnomAD-SV does not represent them comparably."),
     "gnomad_af_popmax": ("stage 6", "DNA — population database", "measurement", "gnomAD-SV per-ancestry allele frequencies",
-        "Highest frequency across ancestry groups. Preferred over a global average, "
-        "which is dominated by the largest group and can hide a variant that is rare "
-        "worldwide but common where the donor came from."),
+        "The HIGHEST frequency among the nine ancestry groups gnomAD reports. It is "
+        "the right statistic for a conservative screen — a variant common anywhere is "
+        "not private — and it is what `is_private` is judged on. **But it is a maximum "
+        "over nine noisy estimates, so it is biased upwards by construction, and it "
+        "hides the case that matters: a variant common in one ancestry and rare in "
+        "others.** Observed here: one junction runs from 3.6% in `afr` to 27.3% in "
+        "`eas`, and popmax reports only the 27.3%. Read it with "
+        "`gnomad_af_popmax_pop`, which names the group it came from, and with the "
+        "per-group columns. It is not an estimate of how common the variant is in "
+        "this donor."),
     "pass_gnomad": ("stage 6", "DNA — population database", "verdict — does NOT filter",
         "gnomad_af_used vs GNOMAD_MAX_AF",
         f"True when the junction is rarer in the general population than "
@@ -717,7 +724,49 @@ SPEC: dict[str, tuple] = {
         "annotation: the universe is not selected on it.** When False every cohort-side "
         "column is empty because the question was not asked, not because the answer was "
         "no."),
+
+    # -- gnomAD, every ancestry group ---------------------------------------
+    "gnomad_af": ("stage 6", "DNA — population database", "measurement",
+        "gnomAD-SV v4.1, the record's cohort-wide AF",
+        "Frequency of this variant across gnomAD's whole cohort, pooled. **A pooled "
+        "figure is dominated by the largest group** — in gnomAD that is `nfe` — so a "
+        "variant common only in a smaller group is diluted here and can look rare. It "
+        "is the lower bound of the three summaries: global \u2264 any single group's "
+        "maximum \u2264 popmax. Empty means no gnomAD record matched, never 0."),
+    "gnomad_af_popmax_pop": ("stage 6", "DNA — population database", "annotation",
+        "which ancestry group supplied gnomad_af_popmax",
+        "The ancestry group the popmax figure came from, e.g. `eas`. **Without it a "
+        "popmax cannot be interpreted**: 0.27 sourced from a group of a few thousand "
+        "people and 0.27 from the largest group are different claims, and a popmax "
+        "consistently drawn from the smallest groups is a sign the maximum is being "
+        "set by noise rather than by real frequency. Empty wherever no record "
+        "matched."),
 }
+
+#: The nine ancestry groups are documented from one template: their meaning is
+#: identical and only the group changes, so writing nine entries by hand would
+#: invite them to drift apart.
+_POPULATION_NAMES = {
+    "afr": "African / African-American", "ami": "Amish",
+    "amr": "Admixed American", "asj": "Ashkenazi Jewish",
+    "eas": "East Asian", "fin": "Finnish", "mid": "Middle Eastern",
+    "nfe": "Non-Finnish European", "sas": "South Asian",
+}
+for _pop in C.GNOMAD_POPULATIONS:
+    SPEC[f"gnomad_af_{_pop}"] = (
+        "stage 6", "DNA — population database", "measurement",
+        f"gnomAD-SV v4.1, the `AF_{_pop}` field",
+        f"Frequency of this variant in gnomAD's **{_POPULATION_NAMES.get(_pop, _pop)}** "
+        f"group. All nine groups are carried rather than a single summary because "
+        f"**which group is the right reference depends on the donor's ancestry, which "
+        f"this pipeline does not know and must not assume**. Comparing across the "
+        f"groups is the point: where they agree, popmax was a fair summary; where they "
+        f"differ by an order of magnitude, it was not. **Empty means this group was "
+        f"not reported for this record, NEVER 0** — reading a missing value as zero "
+        f"turns an unmeasured variant into an apparently absent one, which is the same "
+        f"absence-of-evidence error that makes `pass_gnomad` True when nothing "
+        f"matched. Does not filter.")
+del _pop
 
 #: Terms the columns use that a reader outside this field has no reason to know.
 #: Defined ONCE here and written beside the dictionary, rather than re-explained

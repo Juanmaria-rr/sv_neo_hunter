@@ -64,6 +64,16 @@ PEPTIDE_COLUMNS = [
     "sv_hc", "vf_bp1", "vf_bp2", "qual_bp1", "qual_bp2", "segmapq_bp1",
     "segmapq_bp2", "pon_count", "pon_fraction", "pass_pon", "gnomad_af_used",
     "gnomad_af_popmax", "pass_gnomad", "is_private", "privacy_note",
+    # Every ancestry group, not only the maximum. `popmax` is a maximum over
+    # nine groups, so it is biased upwards by construction and, worse, it hides
+    # the case that matters: a variant common in one ancestry and absent from
+    # the others. Which group is the right reference depends on the donor's
+    # ancestry, which this pipeline does not know and must not assume, so all
+    # of them are carried and the choice is left to whoever reads the table.
+    "gnomad_af", "gnomad_af_popmax_pop",
+    "gnomad_af_afr", "gnomad_af_ami", "gnomad_af_amr", "gnomad_af_asj",
+    "gnomad_af_eas", "gnomad_af_fin", "gnomad_af_mid", "gnomad_af_nfe",
+    "gnomad_af_sas",
     "gene1_TPM", "gene2_TPM", "min_side_TPM", "expressed", "rna_tier",
     "junction_reads", "test", "test_reason",
     # Junction evidence broken down by mechanism, and the lesion size. Which
