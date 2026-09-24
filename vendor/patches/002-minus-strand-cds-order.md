@@ -18,8 +18,8 @@ length returned against the length that should be returned:
 
 | | regions | correct before | correct after |
 |---|---|---|---|
-| EGFR, PTEN, PIK3CA (plus) | 87 | 87 | 87 |
-| ITGA11, TP53, BRCA1, GOLGA3, KRAS, BRAF (minus) | 188 | **0** | **188** |
+| three plus-strand genes | 87 | 87 | 87 |
+| six minus-strand genes | 188 | **0** | **188** |
 
 Two distinct failure modes on the minus strand:
 
