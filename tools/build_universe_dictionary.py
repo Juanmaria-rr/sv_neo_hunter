@@ -398,16 +398,27 @@ SPEC: dict[str, tuple] = {
         "and demonstrably do not cross it."),
     "test": ("stage 8", "RNA — direct read counting", "annotation",
         "the event's geometry, decided BEFORE any read is examined",
-        "**Which of the three counting mechanisms is applicable to this junction**, "
-        "chosen from its geometry alone. One of `insertion` (the junction inserts at "
-        f"least {C.MIN_INSERT_LEN} bp), `chimeric` (inter-chromosomal, or BND/TRA), "
-        f"`sizegap` (intra-chromosomal with a resolvable size >= "
-        f"{C.MIN_TESTABLE_GAP_SIZE} bp), or `none`. **It gates which "
-        "`junction_by_*` column can be non-zero**: `sizegap` can only produce ngap "
-        "counts, `chimeric` only sa, `insertion` only insert. Order matters — an "
+        "**The ARCHITECTURE of the alteration, which is what decides how it can be "
+        "detected at all.** A read crossing the junction does not look the same in the "
+        "three cases, because the alteration has done something physically different "
+        "in each: where material is MISSING the read aligns continuously but skips "
+        "the absent stretch; where two DISTANT places are joined no continuous "
+        "alignment is possible at all and the aligner splits the read in two; where "
+        "sequence has been ADDED the extra bases sit inside the read with nothing in "
+        "the reference to match. So the detection method is not a choice made on the "
+        "evidence — it is a consequence of the shape, derived from the coordinates "
+        f"before any read is looked at. One of `sizegap` (one chromosome, resolvable "
+        f"size >= {C.MIN_TESTABLE_GAP_SIZE} bp — material missing), `chimeric` "
+        f"(inter-chromosomal, or BND/TRA — two distant places joined), `insertion` "
+        f"(at least {C.MIN_INSERT_LEN} bp added), or `none`. "
+        "**It gates which `junction_by_*` column can be non-zero**: `sizegap` permits "
+        "only ngap counts, `chimeric` only sa, `insertion` only insert. Hence two of "
+        "those three columns are normally zero, and that zero means *this method "
+        "cannot apply here*, NOT *we looked and found nothing*. Order matters: an "
         "insertion is tested as an insertion even when its breakend span is tiny, "
         "because the span is not the lesion. `none` means no mechanism applies and "
-        "`rna_tier` is then `UNTESTABLE`, not `NONE`: untested is not tested-negative."),
+        "`rna_tier` is then `UNTESTABLE`, not `NONE` — untested is not "
+        "tested-negative."),
     "test_reason": ("stage 8", "RNA — direct read counting", "annotation",
         "the geometry that selected `test`, with its measured values",
         "**Why that test and not another, in words, with the numbers that decided "
