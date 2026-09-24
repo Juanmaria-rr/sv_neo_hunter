@@ -61,7 +61,8 @@ PEPTIDE_COLUMNS = [
     "neopeptide", "pep_length", "sv_id", "chrom1", "pos1", "gene1", "strand1",
     "chrom2", "pos2", "gene2", "strand2", "svtype", "frame_effect",
     "spans_junction", "junction_aa", "low_complexity", "is_self",
-    "sv_hc", "vf_bp1", "vf_bp2", "qual_bp1", "qual_bp2", "segmapq_bp1",
+    "sv_hc", "vf_bp1", "vf_bp2", "ref_bp1", "ref_bp2",
+    "qual_bp1", "qual_bp2", "segmapq_bp1",
     "segmapq_bp2", "pon_count", "pon_fraction", "pass_pon", "gnomad_af_used",
     "gnomad_af_popmax", "pass_gnomad", "is_private", "privacy_note",
     # Every ancestry group, not only the maximum. `popmax` is a maximum over

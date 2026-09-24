@@ -229,6 +229,54 @@ SPEC: dict[str, tuple] = {
         "`junction_reads`: RNA depth at an expressed gene exceeds DNA depth by orders "
         "of magnitude whether or not the lesion is real. Check DNA depth across the "
         "interval instead."),
+    "ref_bp1": ("stage 6", "DNA — read evidence", "measurement", "caller REF field",
+        "DNA fragments at the first breakend that support the REFERENCE — that is, "
+        "fragments spanning that position with no sign of the alteration. It is the "
+        "other half of `dna_vaf_bp1`, carried so the denominator is visible rather "
+        "than folded into a ratio: 5 variant fragments against 36 reference ones and "
+        "5 against 3 are very different observations behind similar-looking counts."),
+    "ref_bp2": ("stage 6", "DNA — read evidence", "measurement", "caller REF field",
+        "Reference-supporting DNA fragments at the second breakend, the counterpart of "
+        "`ref_bp1`. The two ends are counted separately because coverage and "
+        "mappability differ between them; where `dna_vaf_bp1` and `dna_vaf_bp2` "
+        "disagree markedly, one end sits in harder sequence than the other."),
+    "dna_depth_bp1": ("stage 6", "DNA — derived", "measurement", "vf_bp1 + ref_bp1",
+        "How many DNA fragments were informative at the first breakend — variant and "
+        "reference together. **It is the denominator of `dna_vaf_bp1`, and a VAF over "
+        "a handful of fragments carries almost no information whatever its value.** "
+        "Read the two columns together; the fraction alone hides whether it came from "
+        "4 fragments or 400."),
+    "dna_depth_bp2": ("stage 6", "DNA — derived", "measurement", "vf_bp2 + ref_bp2",
+        "Informative DNA fragments at the second breakend, the denominator of "
+        "`dna_vaf_bp2`. Same reading as `dna_depth_bp1`."),
+    "dna_vaf_bp1": ("stage 6", "DNA — derived", "measurement",
+        "vf_bp1 / (vf_bp1 + ref_bp1)",
+        "**The fraction of informative DNA fragments at the first breakend that carry "
+        "the alteration** — the variant allele frequency, 0-1. Roughly 0.5 is one "
+        "altered copy against one intact, 1.0 is every copy altered, and a few per "
+        "cent is the shape of a subclonal population or of misalignment. It is "
+        "reported instead of `vf_bp1` alone because a raw count of supporting "
+        "fragments is bounded by sequencing depth, so the same count means different "
+        "things at a shallow and a deep locus. Both counts come from the caller, at "
+        "the same breakend, in the same unit. "
+        "**It is biased LOW, and by an amount this column does not know.** A fragment "
+        "can only support the variant by spanning the novel junction with anchored "
+        "sequence on both sides, while it supports the reference merely by covering "
+        "the breakpoint position — so the variant allele is harder to observe and the "
+        "fraction understates it. Observed here: the median across the catalogue is "
+        "0.27, below the 0.5 a germline heterozygote would give. **For a deletion, "
+        "depth inside the interval against its flanks has no such asymmetry** "
+        "(`tools/validate_junction.py`) and is the less biased estimator; where the "
+        "two disagree, prefer it. Empty means no fragments were observed at that "
+        "breakend, never 0. Does not filter."),
+    "dna_vaf_bp2": ("stage 6", "DNA — derived", "measurement",
+        "vf_bp2 / (vf_bp2 + ref_bp2)",
+        "Variant allele frequency at the second breakend, computed and biased exactly "
+        "as `dna_vaf_bp1`. **Agreement between the two ends is itself the check**: a "
+        "real junction is one event seen from both sides and should give a similar "
+        "figure at each, while a large discrepancy points to one end sitting in "
+        "repetitive or poorly covered sequence — cross-check `segmapq_bp*` and "
+        "`dna_depth_bp*`. Empty means no fragments at that breakend, never 0."),
     "qual_bp1": ("stage 6", "DNA — read evidence", "measurement", "caller QUAL",
         f"How confident the variant caller is in the first breakend, on a Phred-like "
         f"scale where higher is better. It reflects how well the read evidence fits a "
