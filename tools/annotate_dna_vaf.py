@@ -45,9 +45,13 @@ from __future__ import annotations
 
 import argparse
 import pathlib
+import sys
 from datetime import date
 
 import pandas as pd
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from provenance import code_version                        # noqa: E402
 
 JOIN_KEY = ["chrom1", "pos1", "chrom2", "pos2"]
 #: Carried so the fraction can be recomputed, and so a reader can see the
@@ -117,6 +121,7 @@ def main() -> None:
     print(f"\n  wrote {args.out} ({len(table.columns)} columns)")
 
     pd.DataFrame([
+        *code_version(),
         {"key": "generated", "value": date.today().isoformat()},
         {"key": "tool", "value": pathlib.Path(__file__).name},
         {"key": "inputs", "value": str(args.inputs)},

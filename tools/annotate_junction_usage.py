@@ -73,6 +73,8 @@ import yaml
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from validate_junction import junction_usage, MIN_MAPQ     # noqa: E402
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from provenance import code_version                        # noqa: E402
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 from svneo import criteria as C                            # noqa: E402
 
@@ -171,6 +173,7 @@ def main() -> None:
               f"{values.between(0.35, 0.65).sum():,}")
 
     pd.DataFrame([
+        *code_version(),
         {"key": "generated", "value": date.today().isoformat()},
         {"key": "tool", "value": pathlib.Path(__file__).name},
         {"key": "config", "value": str(args.config)},

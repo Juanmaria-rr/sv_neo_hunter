@@ -40,9 +40,13 @@ from __future__ import annotations
 
 import argparse
 import pathlib
+import sys
 from datetime import date
 
 import pandas as pd
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from provenance import code_version                        # noqa: E402
 
 #: Assumed genome size for the coverage figure. Only used to express a
 #: catalogue's footprint as a percentage, never in the annotation itself.
@@ -180,7 +184,8 @@ def main() -> None:
     table = annotate(table, catalogues)
     table.to_csv(args.out, sep="\t", index=False)
 
-    provenance = [{"key": "generated", "value": date.today().isoformat()},
+    provenance = [*code_version(),
+                  {"key": "generated", "value": date.today().isoformat()},
                   {"key": "tool", "value": pathlib.Path(__file__).name}]
     for label, (frame, coverage) in catalogues.items():
         source = args.narrow if label == "narrow" else args.broad
