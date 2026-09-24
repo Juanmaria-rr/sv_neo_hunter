@@ -78,6 +78,17 @@ PON_ABSENT_MEANS = 0
 #: pass PON<10 while being documented common polymorphisms.
 GNOMAD_MAX_AF = 0.001
 
+#: Where a variant stops being rare and becomes an ordinary polymorphism. 1% is
+#: the classical population-genetics line and the one gnomAD's own analyses use;
+#: the ACMG/AMP stand-alone-benign criterion sits higher, at 5%, but answers a
+#: different question (can pathogenicity be ruled out) than the one asked here
+#: (is this ordinary population variation rather than something acquired).
+#:
+#: Deliberately NOT reusing GNOMAD_MAX_AF above: that is a rare-variant cut used
+#: to decide what to carry forward, and folding the two together would leave
+#: "common" without a threshold of its own.
+POPULATION_COMMON_AF = 0.01
+
 #: Reciprocal-overlap fraction required to call a cell-line SV the same event as
 #: a gnomAD-SV record. 0.5 is the community default for SV matching.
 GNOMAD_RECIPROCAL_OVERLAP = 0.5

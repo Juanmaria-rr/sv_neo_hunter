@@ -332,6 +332,41 @@ SPEC: dict[str, tuple] = {
         "`gnomad_af_popmax_pop`, which names the group it came from, and with the "
         "per-group columns. It is not an estimate of how common the variant is in "
         "this donor."),
+    "is_highfreq_gnomad": ("stage 6", "DNA — derived verdict", "verdict — does NOT filter",
+        "gnomad_af_popmax vs POPULATION_COMMON_AF",
+        f"**Is this junction an ordinary polymorphism according to gnomAD?** True when "
+        f"`gnomad_af_popmax` >= {C.POPULATION_COMMON_AF:.0%} "
+        f"(`POPULATION_COMMON_AF`) — the classical line between a polymorphism and a "
+        f"rare variant, and the one gnomAD's own analyses use. The ACMG/AMP "
+        f"stand-alone-benign criterion sits higher, at 5%, but answers a different "
+        f"question: whether pathogenicity can be ruled out, not whether this is "
+        f"ordinary population variation. "
+        f"**False also when gnomAD has no record at all** — which is 407 of the 783 "
+        f"distinct junctions here, so a False is more often 'gnomAD has never seen "
+        f"this' than 'gnomAD says it is rare'. `gnomad_af_popmax` being empty is what "
+        f"tells the two apart, and `is_highfreq_panel` is the column that catches what "
+        f"gnomAD does not know. **Note the polarity: True means COMMON, so True is the "
+        f"reason to set a candidate aside** — the opposite of the retired `is_private`. "
+        f"The threshold barely matters here: gnomAD popmax is strongly bimodal in this "
+        f"catalogue (283 of 376 above 25%), and moving the cut from 0.1% to 2% changes "
+        f"the verdict on 5 junctions. Does not filter."),
+    "is_highfreq_panel": ("stage 6", "DNA — derived verdict", "verdict — does NOT filter",
+        "pon_fraction vs POPULATION_COMMON_AF",
+        f"**Is this junction an ordinary polymorphism according to the panel of "
+        f"normals?** True when `pon_fraction` >= {C.POPULATION_COMMON_AF:.0%}, about "
+        f"119 genomes in a panel of ~11,912. Absence from the panel is a MEASURED "
+        f"zero and reads as False: the panel is a closed set that this pipeline "
+        f"screened, so a junction not in it was looked for and not found "
+        f"(`PON_ABSENT_MEANS`). That is a stronger claim than an absent gnomAD record, "
+        f"which is external and may simply not represent the event comparably. "
+        f"**Unlike the gnomAD column this one IS sensitive to the threshold**: the "
+        f"panel fractions are continuous with no natural gap, and moving the cut from "
+        f"1% to 5% changes the verdict on 47 junctions, so `pon_fraction` is carried "
+        f"beside it for anyone who wants a different line. **Caveat by SV type:** the "
+        f"panel covers DEL (84% of them matched) and DUP (93%) well and TRA/INV "
+        f"partially; no `t2tINV` junction has ever matched it, so for that type a "
+        f"False means the panel has nothing to say. **True means COMMON.** "
+        f"Does not filter."),
     "pass_gnomad": ("stage 6", "DNA — population database", "verdict — does NOT filter",
         "gnomad_af_used vs GNOMAD_MAX_AF",
         f"True when the junction is rarer in the general population than "
@@ -341,11 +376,6 @@ SPEC: dict[str, tuple] = {
         f"it is also True when no frequency was found at all** — absence of evidence "
         f"is scored as a pass, so a True here can mean 'rare' or 'never looked up'. "
         f"Check `gnomad_af_used` before believing it."),
-    "is_private": ("stage 6", "DNA — derived verdict", "verdict — does NOT filter",
-        "pass_pon AND pass_gnomad",
-        "**Is this the sample's own variant rather than common germline variation?** "
-        "On the noPON branch only the gnomAD half counts, so it is half an answer; "
-        "`privacy_note` says which halves ran."),
     "privacy_note": ("stage 6", "bookkeeping", "annotation", "which privacy tests ran",
         "Plain text saying which halves of the privacy test actually ran, so "
         "`is_private` can be read for what it is. On a panel-reporting branch it "
