@@ -43,7 +43,7 @@ done
 [[ -n "$OUT"    ]] || { echo "  --out-dir is required (deliberately no default)" >&2; exit 2; }
 [[ -f "$CONFIG" ]] || { echo "  config not found: $CONFIG" >&2; exit 2; }
 
-if [[ -e "$OUT/rpe1_universe/candidate_universe.tsv" && $FORCE -eq 0 ]]; then
+if [[ -e "$OUT/${UNIVERSE_DIR:-universe}/candidate_universe.tsv" && $FORCE -eq 0 ]]; then
   cat >&2 <<MSG
   REFUSING TO WRITE: $OUT already holds a candidate_universe.tsv.
 
@@ -52,15 +52,17 @@ if [[ -e "$OUT/rpe1_universe/candidate_universe.tsv" && $FORCE -eq 0 ]]; then
   complete new one. Build into a new directory and compare:
 
       tools/run_universe.sh --config $CONFIG --out-dir ${OUT}_rebuild
-      diff <(head -1 $OUT/rpe1_universe/candidate_universe.tsv | tr '\t' '\n') \\
-           <(head -1 ${OUT}_rebuild/rpe1_universe/candidate_universe.tsv | tr '\t' '\n')
+      diff <(head -1 "$U/candidate_universe.tsv" | tr '\t' '\n') \\
+           <(head -1 "${OUT}_rebuild/${UNIVERSE_DIR:-universe}/candidate_universe.tsv" | tr '\t' '\n')
 
   --force overrides this. It is not recoverable.
 MSG
   exit 1
 fi
 
-U="$OUT/rpe1_universe"
+# Subdirectory for the universe. Overridable, and deliberately generic:
+# a name naming the material does not belong in a tracked script.
+U="$OUT/${UNIVERSE_DIR:-universe}"
 run() {
   echo; echo "── $1"; shift
   if [[ $DRY -eq 1 ]]; then printf '   %q' "$@"; echo; else "$@"; fi
