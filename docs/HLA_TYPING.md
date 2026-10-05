@@ -86,6 +86,19 @@ OptiType on RNA is slow: the solver scales with the number of HLA reads, and a
 transcribed locus yields tens of thousands (minutes to tens of minutes per sample,
 against ~30 s for DNA).
 
+## Report
+
+`tools/build_hla_report.py --config … --hla-dir … [--predictions <netMHCpan table>]`
+writes `HLA_TYPING_REPORT.html` and `.md` into the typing directory: genotype per
+sample and method, per-allele evidence, the PURPLE fit, LILAC QC, OptiType calls.
+
+**Allele loss is judged from reads, not copy number.** In each sample, an allele's
+share of its gene's DNA fragments (`TumorTotal` for derived samples) near 0.5 means
+present; below 0.10 means lost. LILAC's allele copy number is printed but not used:
+it inherits PURPLE's purity/ploidy fit, which for a clonal line typed against its own
+parent need not describe the sample. The report states when the copy numbers imply an
+imbalance the fragment shares do not show.
+
 ## Limitations
 
 - RNA BAMs are used as aligned (as oncoanalyser does). RNA reads that the aligner
