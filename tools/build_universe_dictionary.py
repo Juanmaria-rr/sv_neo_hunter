@@ -949,6 +949,41 @@ _MF_RULE = (f"Binder = affinity <= {MF['affinity_nM']:g} nM AND presentation per
 _SAME_AS = ("Same definition as the netMHCpan column `{0}`, computed from MHCflurry's "
             "predictions instead. ")
 SPEC.update({
+    "transcript_id1": ("stage 2", "protein — in silico", "annotation", "Ensembl 115, chosen by transcript_rule1",
+        "The Ensembl transcript used for breakend 1 when building the mutant protein. "
+        "Every peptide of the row is derived from this isoform; a different isoform "
+        "of the same gene can give different peptides for the same SV."),
+    "transcript_id2": ("stage 2", "protein — in silico", "annotation", "Ensembl 115, chosen by transcript_rule2",
+        "The Ensembl transcript used for breakend 2. Equal to `transcript_id1` for "
+        "an event inside one gene."),
+    "transcript_rule1": ("stage 2", "bookkeeping", "annotation", "Ensembl GTF transcript tags",
+        "Why `transcript_id1` was chosen: `MANE_Select` (preferred), "
+        "`Ensembl_canonical` when the gene has no MANE transcript, or `longest` "
+        "(largest genomic span among complete transcripts) as the last resort. "
+        "`longest` rows rest on the weakest choice."),
+    "transcript_rule2": ("stage 2", "bookkeeping", "annotation", "Ensembl GTF transcript tags",
+        "Why `transcript_id2` was chosen; same rules as `transcript_rule1`."),
+    "isoform1_TPM": ("stage 7", "RNA — quantification", "measurement", "Isofox transcript_data",
+        "Expression of `transcript_id1` in this line (Isofox adjusted TPM). Empty when "
+        "Isofox's annotation does not contain the transcript. Read beside "
+        "`gene1_TPM`: a low value under a high gene TPM means the cell mostly "
+        "makes another isoform."),
+    "isoform2_TPM": ("stage 7", "RNA — quantification", "measurement", "Isofox transcript_data",
+        "Expression of `transcript_id2` in this line; see `isoform1_TPM`."),
+    "breakend_region1": ("stage 2", "protein — in silico", "annotation", "breakend vs transcript_id1",
+        "Where breakend 1 falls in its transcript: `CDS`, `UTR`, `intron` or "
+        "`outside`. Decides whether the mutant transcript can be predicted from "
+        "sequence alone (see `junction_model`)."),
+    "breakend_region2": ("stage 2", "protein — in silico", "annotation", "breakend vs transcript_id2",
+        "Where breakend 2 falls in its transcript; see `breakend_region1`."),
+    "junction_model": ("stage 2", "protein — in silico", "annotation", "breakend_region1 + breakend_region2",
+        "**How exact the mutant-protein model is.** `coding join` (both breakends in "
+        "coding exons) and `whole-exon change` (both intronic) are determined by "
+        "sequence and were checked against an independent reconstruction "
+        "(tools/audit_peptide_generation.py). `exon-intron: splice outcome "
+        "uncertain` means one exon lost its splice site; the peptides assume the "
+        "transcript joins the next exon boundary, which the cell may not do. "
+        "`inter-gene fusion` follows the same exon-boundary rule across genes."),
     "presentable_mhcflurry": ("MHC layer", "prediction — MHCflurry", "verdict — does NOT filter",
         "MHCflurry 2.2.1 against the line's own class I genotype",
         "**Could this cell present the peptide, according to MHCflurry?** Binds >= 1 "

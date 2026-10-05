@@ -190,13 +190,23 @@ class SVFusion(object):
             return self.cc_1.transcript.three_prime_utr_sequence
 
     @property
+    def starts_at_native_start(self):
+        # PATCHED (see vendor/patches/004-non-aug-initiation.md).
+        # True when the 5' side keeps its transcript's own start codon, whatever
+        # that codon is: the comparison is with the transcript's annotated CDS,
+        # not with the literal string 'ATG'.
+        five = self.cc_1 if self.cc_1.part == '5' else self.cc_2
+        native = five.transcript.coding_sequence[:3]
+        return bool(five.cdslist) and five.nt_sequence[:3] == native and len(native) == 3
+
+    @property
     def frame_effect(self):
         # fixed a bug: the 5' cds collection could be empty, or less than 3 aa,
         # in this case, traditional start codon is lost and the program will search for the next start codon automatically.
         # but such prediction is of low reliability, we should annotate it and remove these fusions when necessary.
-        if self.cc_1.part == '5' and not self.cc_1.nt_sequence.startswith('ATG'):
-            return 'Start-loss'
-        if self.cc_2.part == '5' and not self.cc_2.nt_sequence.startswith('ATG'):
+        # PATCHED (see vendor/patches/004-non-aug-initiation.md): Start-loss means
+        # the 5' side lost its OWN start codon, not that the codon is not ATG.
+        if not self.starts_at_native_start:
             return 'Start-loss'
         if len(self.nt_sequence_cds) == 3*(len(self.aa_sequence)+1):
             return 'In-frame'

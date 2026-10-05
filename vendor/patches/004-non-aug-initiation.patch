@@ -1,0 +1,53 @@
+--- a/neosv/sequence_utils.py
++++ b/neosv/sequence_utils.py
+@@ -10,8 +10,17 @@
+     """
+     dna_seq = Seq(trim_to_3x(svfusion.nt_sequence))
+     mrna_seq = dna_seq.transcribe()
+-    aa_seq = mrna_seq.translate(to_stop=True)
+-    return str(aa_seq)
++    aa_seq = str(mrna_seq.translate(to_stop=True))
++    # PATCHED (see vendor/patches/004-non-aug-initiation.md).
++    # A transcript annotated with a non-AUG start (CUG, GUG, ...) is still
++    # initiated with methionine; Ensembl's protein for it begins with M. Read
++    # literally, the first codon gives L/V/..., so the N-terminal windows differ
++    # from wild type by one residue and pass the wild-type subtraction as
++    # spurious neopeptides. When the fusion begins at the 5' transcript's own
++    # start codon, its first residue is methionine.
++    if aa_seq and svfusion.starts_at_native_start and not aa_seq.startswith('M'):
++        aa_seq = 'M' + aa_seq[1:]
++    return aa_seq
+ 
+ 
+ def set_nt_seq(svfusion):
+--- a/neosv/fusion_class.py
++++ b/neosv/fusion_class.py
+@@ -190,14 +190,24 @@
+             return self.cc_1.transcript.three_prime_utr_sequence
+ 
+     @property
++    def starts_at_native_start(self):
++        # PATCHED (see vendor/patches/004-non-aug-initiation.md).
++        # True when the 5' side keeps its transcript's own start codon, whatever
++        # that codon is: the comparison is with the transcript's annotated CDS,
++        # not with the literal string 'ATG'.
++        five = self.cc_1 if self.cc_1.part == '5' else self.cc_2
++        native = five.transcript.coding_sequence[:3]
++        return bool(five.cdslist) and five.nt_sequence[:3] == native and len(native) == 3
++
++    @property
+     def frame_effect(self):
+         # fixed a bug: the 5' cds collection could be empty, or less than 3 aa,
+         # in this case, traditional start codon is lost and the program will search for the next start codon automatically.
+         # but such prediction is of low reliability, we should annotate it and remove these fusions when necessary.
+-        if self.cc_1.part == '5' and not self.cc_1.nt_sequence.startswith('ATG'):
++        # PATCHED (see vendor/patches/004-non-aug-initiation.md): Start-loss means
++        # the 5' side lost its OWN start codon, not that the codon is not ATG.
++        if not self.starts_at_native_start:
+             return 'Start-loss'
+-        if self.cc_2.part == '5' and not self.cc_2.nt_sequence.startswith('ATG'):
+-            return 'Start-loss'
+         if len(self.nt_sequence_cds) == 3*(len(self.aa_sequence)+1):
+             return 'In-frame'
+         elif len(self.nt_sequence_cds) > 3*(len(self.aa_sequence)+1):
+\ No newline at end of file

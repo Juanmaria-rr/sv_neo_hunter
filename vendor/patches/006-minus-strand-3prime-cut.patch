@@ -1,0 +1,17 @@
+--- a/neosv/fusion_utils.py
++++ b/neosv/fusion_utils.py
+@@ -81,7 +81,13 @@
+                             False,
+                             False
+                             ) for cds in cds_ranges[cds_index:]]
+-            cds_list[0].start = pos
++            # PATCHED (see vendor/patches/006-minus-strand-3prime-cut.md).
++            # Minus strand, 3' side: the transcript reads from high to low
++            # coordinates, so the part kept downstream of a breakpoint inside
++            # this exon is [start, pos]. Was `.start = pos`, which kept the
++            # upstream side ([pos, end]) and miscounted the 3' length, shifting
++            # the frame of every minus-strand fusion cut inside a coding exon.
++            cds_list[0].end = pos
+             cds_list[0].intact = False
+             cds_list[-1].stopcodon = True
+         else:

@@ -8,6 +8,18 @@ def get_longest_transcript(transcripts):
     return transcript
 
 
+# PATCHED (see vendor/patches/005-preferred-transcript.md).
+# transcript_id -> rank (0 = MANE Select, 1 = Ensembl canonical). Empty means
+# the original behaviour (longest genomic span). Filled by the caller from the
+# Ensembl GTF's transcript tags, which pyensembl does not load.
+PREFERRED_TRANSCRIPTS = {}
+
+
+def set_preferred_transcripts(ranks):
+    PREFERRED_TRANSCRIPTS.clear()
+    PREFERRED_TRANSCRIPTS.update(ranks)
+
+
 def get_transcript(chrom, pos, ensembl, complete=True):
     """
     :param chrom: chromosome with no chr of breakpoint
@@ -21,6 +33,15 @@ def get_transcript(chrom, pos, ensembl, complete=True):
     transcripts = ensembl.transcripts_at_locus(contig=str(chrom), position=int(pos))
     transcripts_comp = [transcript for transcript in transcripts if transcript.complete]
     if transcripts_comp:
+        # PATCHED (005): MANE Select first, then Ensembl canonical, then the
+        # longest. "Longest" is by genomic span, which favours rare isoforms with
+        # distant exons or N-terminal extensions (e.g. non-AUG-initiated ones);
+        # the preferred transcript is the one a cell most likely makes.
+        preferred = [t for t in transcripts_comp if t.transcript_id in PREFERRED_TRANSCRIPTS]
+        if preferred:
+            best = min(PREFERRED_TRANSCRIPTS[t.transcript_id] for t in preferred)
+            return get_longest_transcript(
+                [t for t in preferred if PREFERRED_TRANSCRIPTS[t.transcript_id] == best])
         return get_longest_transcript(transcripts_comp)
     else:
         if complete:

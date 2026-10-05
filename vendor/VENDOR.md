@@ -12,7 +12,7 @@ repository runs end to end without an external checkout or network access.
 |---|---|
 | Licence | **MIT**, Copyright (c) 2022 Yang Shi — see [`LICENSE.NeoSV`](LICENSE.NeoSV) |
 | Source | `NeoSV-main/neosv`, line endings normalised to LF |
-| Local modifications | **three patches** — see [`patches/`](patches/) |
+| Local modifications | **six patches** — see [`patches/`](patches/) |
 
 MIT permits modification and redistribution provided the copyright notice is
 retained. `LICENSE.NeoSV` is included for that purpose and must accompany any
@@ -39,6 +39,21 @@ sequence even when the junction is intronic, where they are spliced out. That
 fabricated frameshifts (or in-frame insertions) for deletions and duplications
 inside a single intron. They now enter the coding sequence only when both breakends
 cut inside a coding exon. Test: `test_intronic_junction_insertion_is_not_coding`.
+
+[`004-non-aug-initiation`](patches/004-non-aug-initiation.md) — a transcript
+annotated with a non-AUG start (CUG, ...) was translated literally (L instead of
+M), so its N-terminal windows passed the wild-type subtraction as spurious
+neopeptides for any SV hitting it, and such events were labelled Start-loss.
+
+[`005-preferred-transcript`](patches/005-preferred-transcript.md) — the
+transcript at each breakend was the complete one with the largest genomic span;
+it is now MANE Select, then Ensembl canonical, then the longest. Peptides and the
+stage-7 expression call both depend on the isoform.
+
+[`006-minus-strand-3prime-cut`](patches/006-minus-strand-3prime-cut.md) — on a
+minus-strand transcript, the 3' side cut inside a coding exon kept the wrong side
+of the exon, shifting the frame. Found by `tools/audit_peptide_generation.py`, an
+independent reconstruction that now agrees on every event it can model.
 
 ## What this repository adds, and where
 

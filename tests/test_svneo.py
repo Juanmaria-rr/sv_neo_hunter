@@ -277,6 +277,90 @@ def test_intronic_junction_insertion_is_not_coding():
             "003-intronic-junction-insertion.patch").exists()
 
 
+class _FakeTranscript:
+    """The slice of pyensembl's Transcript that NeoSV's helpers read."""
+    def __init__(self, tid, strand, cds_ranges, start, end, cds="", complete=True):
+        self.transcript_id, self.strand = tid, strand
+        self.coding_sequence_position_ranges = cds_ranges
+        self.start, self.end, self.complete = start, end, complete
+        self.coding_sequence = cds
+
+
+def _vendor():
+    import sys
+    from svneo.generators.neosv import VENDOR_DIR
+    sys.path.insert(0, VENDOR_DIR)
+    return VENDOR_DIR
+
+
+def test_minus_strand_3prime_cut():
+    """Patch 006: minus strand, 3' side cut inside a coding exon keeps
+    [exon start, breakpoint], i.e. the exon is shortened at its END."""
+    _vendor()
+    from neosv.fusion_utils import truncate_cds
+    t = _FakeTranscript("T1", "-", [(100, 199), (300, 399)], 50, 450)
+    three = truncate_cds(t, "3", 150)          # inside the 3'-most exon (100-199)
+    first = three.cdslist[0]
+    assert (first.start, first.end) == (100, 150), (first.start, first.end)
+    five = truncate_cds(t, "5", 350)           # minus 5' side: keeps [pos, end]
+    last = five.cdslist[-1]
+    assert (last.start, last.end) == (350, 399), (last.start, last.end)
+
+
+def test_non_aug_start_is_methionine():
+    """Patch 004: a fusion keeping its transcript's own CTG start translates
+    it as M, and is not labelled Start-loss."""
+    _vendor()
+    from neosv.fusion_class import CDS, SVFusion
+    from neosv import sequence_utils
+    cds = "CTGAAAGGGTTTCCCAAAGGGTTTCCCTAA"
+
+    class Coll:
+        def __init__(self, part):
+            self.part, self.strand = part, "+"
+            self.transcript = _FakeTranscript("T1", "+", [], 0, 0, cds)
+            self.transcript.three_prime_utr_sequence = ""
+            self.cdslist = [CDS(1, 10, True, part == "5", part == "3")]
+            self.nt_sequence = cds[:15] if part == "5" else cds[15:]
+
+    class Sv:
+        insertion = ""
+
+    fusion = SVFusion(Sv(), Coll("5"), Coll("3"))
+    assert fusion.starts_at_native_start
+    fusion.nt_sequence = sequence_utils.set_nt_seq(fusion)    # as the generator does
+    fusion.aa_sequence = sequence_utils.set_aa_seq(fusion)
+    assert fusion.aa_sequence.startswith("M"), fusion.aa_sequence
+    assert fusion.frame_effect != "Start-loss"
+
+
+def test_preferred_transcript_order():
+    """Patch 005: MANE Select beats Ensembl canonical beats longest span."""
+    _vendor()
+    from neosv import transcript_utils as tu
+
+    class Ensembl:
+        def __init__(self, ts):
+            self.ts = ts
+
+        def transcripts_at_locus(self, contig, position):
+            return self.ts
+
+    longest = _FakeTranscript("LONG", "+", [(1, 9)], 0, 10_000)
+    canonical = _FakeTranscript("CANON", "+", [(1, 9)], 0, 5_000)
+    mane = _FakeTranscript("MANE", "+", [(1, 9)], 0, 1_000)
+    genome = Ensembl([longest, canonical, mane])
+    try:
+        tu.set_preferred_transcripts({})
+        assert tu.get_transcript("1", 5, genome).transcript_id == "LONG"
+        tu.set_preferred_transcripts({"CANON": 1})
+        assert tu.get_transcript("1", 5, genome).transcript_id == "CANON"
+        tu.set_preferred_transcripts({"CANON": 1, "MANE": 0})
+        assert tu.get_transcript("1", 5, genome).transcript_id == "MANE"
+    finally:
+        tu.set_preferred_transcripts({})
+
+
 def test_frame_patch_is_applied():
     """Patch 001 removes a stop-codon offset that is wrong for pyensembl > 2.3.13.
     Unpatched, the tool emits 170 peptides where the patched one emits 64, with

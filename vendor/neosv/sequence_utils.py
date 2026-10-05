@@ -10,8 +10,17 @@ def set_aa_seq(svfusion):
     """
     dna_seq = Seq(trim_to_3x(svfusion.nt_sequence))
     mrna_seq = dna_seq.transcribe()
-    aa_seq = mrna_seq.translate(to_stop=True)
-    return str(aa_seq)
+    aa_seq = str(mrna_seq.translate(to_stop=True))
+    # PATCHED (see vendor/patches/004-non-aug-initiation.md).
+    # A transcript annotated with a non-AUG start (CUG, GUG, ...) is still
+    # initiated with methionine; Ensembl's protein for it begins with M. Read
+    # literally, the first codon gives L/V/..., so the N-terminal windows differ
+    # from wild type by one residue and pass the wild-type subtraction as
+    # spurious neopeptides. When the fusion begins at the 5' transcript's own
+    # start codon, its first residue is methionine.
+    if aa_seq and svfusion.starts_at_native_start and not aa_seq.startswith('M'):
+        aa_seq = 'M' + aa_seq[1:]
+    return aa_seq
 
 
 def set_nt_seq(svfusion):

@@ -76,7 +76,7 @@ class NeoSVGenerator(PeptideGenerator):
             module = importlib.import_module(self.package)
             return {name: importlib.import_module(f"{self.package}.{name}")
                     for name in ("input", "sv_utils", "fusion_utils",
-                                 "sequence_utils")} | {"root": module}
+                                 "sequence_utils", "transcript_utils")} | {"root": module}
         except ImportError as error:
             raise GeneratorError(
                 f"NeoSV is not importable ({error}). Searched: {self.search_paths}. "
@@ -112,6 +112,10 @@ class NeoSVGenerator(PeptideGenerator):
 
         try:
             ensembl = api["input"].ensembl_load(str(release), None, None, cache_dir)
+            # Transcript preference (vendor patch 005): MANE Select, then Ensembl
+            # canonical, then longest. The tags come from the release's GTF.
+            ranks = ext.transcript_ranks(release, cache_dir)
+            api["transcript_utils"].set_preferred_transcripts(ranks)
 
             if vcf_file.endswith(".vcf"):
                 svs = [api["sv_utils"].sv_pattern_infer_vcf(v)
@@ -147,7 +151,8 @@ class NeoSVGenerator(PeptideGenerator):
 
             peptide_path = os.path.join(out_dir, f"{prefix}.all_neopeptides.txt")
             anno_path = os.path.join(out_dir, f"{prefix}.anno.txt")
-            n_rows = ext.write_all_neopeptides(peptide_path, fusions, sv_id_map, prefix)
+            n_rows = ext.write_all_neopeptides(peptide_path, fusions, sv_id_map, prefix,
+                                               ranks)
             ext.write_annotation(anno_path, fusions, sv_id_map, prefix)
 
             peptides = pd.read_csv(peptide_path, sep="\t", dtype=str)

@@ -26,6 +26,8 @@ sequences are upstream's and not ours.
 """
 from __future__ import annotations
 
+import os
+
 import gzip
 import re
 
@@ -95,7 +97,8 @@ def junction_indices(svfusion) -> tuple[int | None, int | None]:
     return len(left), len(left) // 3
 
 
-def spans_junction(aa_sequence: str, peptide: str, junction_aa: int | None) -> bool | None:
+def spans_junction(aa_sequence: str, peptide: str, junction_aa: int | None,
+                   junction_nt: int | None = None) -> bool | None:
     """Does this peptide actually cross the breakpoint?
 
     A sliding window over the fusion protein also produces peptides lying wholly
@@ -108,9 +111,18 @@ def spans_junction(aa_sequence: str, peptide: str, junction_aa: int | None) -> b
     """
     if junction_aa is None or not peptide or not aa_sequence:
         return None
+    # Decided in NUCLEOTIDES when the offset is known. The junction lies between
+    # nucleotides junction_nt-1 and junction_nt; a window covering nucleotides
+    # [3*start, 3*(start+len)) crosses it iff 3*start < junction_nt <
+    # 3*(start+len). In residues this is not the same test: when the junction
+    # falls inside a codon, that residue is chimeric (new), and a window starting
+    # exactly on it was reported as not spanning by `start < junction_aa`.
     start = aa_sequence.find(peptide)
     while start != -1:
-        if start < junction_aa < start + len(peptide):
+        if junction_nt is not None:
+            if 3 * start < junction_nt < 3 * (start + len(peptide)):
+                return True
+        elif start < junction_aa < start + len(peptide):
             return True
         start = aa_sequence.find(peptide, start + 1)
     return False
@@ -120,15 +132,104 @@ def spans_junction(aa_sequence: str, peptide: str, junction_aa: int | None) -> b
 # 3. The candidate-peptide table, written before any MHC step
 # ============================================================================
 
+# ============================================================================
+# Transcript preference (vendor patch 005)
+# ============================================================================
+
+RULE_NAMES = {0: "MANE_Select", 1: "Ensembl_canonical"}
+
+
+def transcript_ranks(release: int, cache_dir: str | None) -> dict[str, int]:
+    """transcript_id -> 0 (MANE Select) / 1 (Ensembl canonical), from the GTF.
+
+    pyensembl does not load GTF tags, so they are read once from the cached GTF
+    and kept beside it as a small TSV. Returns {} if the GTF cannot be found, in
+    which case the generator falls back to NeoSV's longest-transcript rule and
+    every row says so in `transcript_rule*`.
+    """
+    import glob, gzip, re
+    roots = [cache_dir] if cache_dir else []
+    roots.append(os.environ.get("PYENSEMBL_CACHE_DIR", ""))
+    gtf = next((g for r in roots if r for g in glob.glob(
+        os.path.join(r, "**", f"ensembl{release}", f"*.{release}.gtf.gz"), recursive=True)), None)
+    if not gtf:
+        return {}
+    cache = gtf.replace(".gtf.gz", ".transcript_tags.tsv")
+    if not os.path.exists(cache):
+        tid_re, tag_re = re.compile(r'transcript_id "([^"]+)"'), re.compile(r'tag "([^"]+)"')
+        with gzip.open(gtf, "rt") as src, open(cache, "w") as dst:
+            dst.write("transcript_id\trank\n")
+            for line in src:
+                if "\ttranscript\t" not in line:
+                    continue
+                tags = set(tag_re.findall(line))
+                rank = 0 if "MANE_Select" in tags else 1 if "Ensembl_canonical" in tags else None
+                if rank is not None:
+                    dst.write(f"{tid_re.search(line).group(1)}\t{rank}\n")
+    ranks = {}
+    with open(cache) as handle:
+        next(handle)
+        for line in handle:
+            tid, rank = line.rstrip("\n").split("\t")
+            ranks[tid] = int(rank)
+    return ranks
+
+
+def breakend_region(transcript, pos) -> str:
+    """Where a breakend falls in the transcript the generator used."""
+    if transcript is None or pos is None:
+        return ""
+    pos = int(pos)
+    if any(s <= pos <= e for s, e in transcript.coding_sequence_position_ranges):
+        return "CDS"
+    exons = sorted((x.start, x.end) for x in transcript.exons)
+    if any(s <= pos <= e for s, e in exons):
+        return "UTR"
+    if transcript.start <= pos <= transcript.end:
+        return "intron"
+    return "outside"
+
+
+def junction_model(fusion, r1: str, r2: str) -> str:
+    """How the mutant transcript is built, and how certain that model is.
+
+    The sequence model is exact when the product is a join of coding sequence
+    (both breakends in coding exons) or of whole exons (both in introns). When
+    one breakend is exonic and the other intronic, the exon on the intronic side
+    has lost its splice site and what the cell transcribes depends on cryptic
+    splice-site use, which no sequence rule decides: the generator joins to the
+    next exon boundary, and this column says that is an assumption.
+    """
+    g1, g2 = _attr(fusion, "cc_1", "gene_name"), _attr(fusion, "cc_2", "gene_name")
+    if g1 != g2:
+        return "inter-gene fusion"
+    pair = {r1, r2}
+    if pair == {"CDS"}:
+        return "coding join"
+    if pair == {"intron"}:
+        return "whole-exon change (or no change, same intron)"
+    if pair == {"CDS", "intron"}:
+        return "exon-intron: splice outcome uncertain"
+    return f"{r1}-{r2}: splice outcome uncertain"
+
+
+def transcript_rule(transcript_id, ranks: dict) -> str:
+    if not transcript_id:
+        return ""
+    return RULE_NAMES.get(ranks.get(transcript_id), "longest")
+
+
 #: Column order of the emitted table. Matches the contract in base.py.
 PEPTIDE_COLUMNS = ["prefix", "sv_id", "chrom1", "pos1", "gene1", "transcript_id1",
                    "strand1", "chrom2", "pos2", "gene2", "transcript_id2", "strand2",
                    "svtype", "frame_effect", "junction_nt", "junction_aa",
-                   "spans_junction", "neopeptide", "pep_length"]
+                   "spans_junction", "neopeptide", "pep_length",
+                   "transcript_rule1", "transcript_rule2",
+                   "breakend_region1", "breakend_region2", "junction_model"]
 
 
 def write_all_neopeptides(path: str, fusions: list, sv_id_map: dict,
-                          prefix: str) -> int:
+                          prefix: str, ranks: dict | None = None) -> int:
     """Write every candidate peptide, one row per (fusion, peptide).
 
     This is the table the whole downstream analysis consumes, and it exists
@@ -161,13 +262,23 @@ def write_all_neopeptides(path: str, fusions: list, sv_id_map: dict,
                 # the one thing it reports is the reliability warning below.
                 "frame_effect": _frame_effect(fusion),
                 "junction_nt": junction_nt, "junction_aa": junction_aa,
+                # Which rule picked each transcript: MANE_Select,
+                # Ensembl_canonical, or longest (genomic span) as the fallback.
+                "transcript_rule1": transcript_rule(
+                    _attr(fusion, "cc_1", "transcript_id"), ranks or {}),
+                "transcript_rule2": transcript_rule(
+                    _attr(fusion, "cc_2", "transcript_id"), ranks or {}),
             }
+            r1 = breakend_region(getattr(fusion.cc_1, "transcript", None), sv.pos1)
+            r2 = breakend_region(getattr(fusion.cc_2, "transcript", None), sv.pos2)
+            base.update(breakend_region1=r1, breakend_region2=r2,
+                        junction_model=junction_model(fusion, r1, r2))
             for peptide in fusion.neoepitopes:
                 row = dict(base)
                 row["neopeptide"] = peptide
                 row["pep_length"] = len(peptide)
                 row["spans_junction"] = spans_junction(
-                    fusion.aa_sequence, peptide, junction_aa)
+                    fusion.aa_sequence, peptide, junction_aa, junction_nt)
                 handle.write("\t".join(
                     "" if row.get(c) is None else str(row.get(c, ""))
                     for c in PEPTIDE_COLUMNS) + "\n")

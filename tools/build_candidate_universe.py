@@ -98,6 +98,10 @@ PEPTIDE_COLUMNS = [
     "presentation_best_allele_mhcflurry", "presentation_margin_mhcflurry",
     "presentation_limiting_cut_mhcflurry", "presentation_robustness_mhcflurry",
     "predictors_agree",
+    # Which transcript was used, by which rule, and how exact the model is.
+    "transcript_id1", "transcript_id2", "transcript_rule1", "transcript_rule2",
+    "isoform1_TPM", "isoform2_TPM",
+    "breakend_region1", "breakend_region2", "junction_model",
 ]
 
 
