@@ -76,6 +76,29 @@ def read_vcf_events(vcf: pathlib.Path) -> dict[str, dict]:
     return out
 
 
+def read_vcf_breakends(vcf: pathlib.Path) -> dict[str, dict]:
+    """sv_id -> the record as written (any mate order), with which side of each
+    breakend the junction keeps: 'left' = sequence up to the position."""
+    out = {}
+    for line in open(vcf):
+        if line.startswith("#"):
+            continue
+        f = line.rstrip("\n").split("\t")
+        chrom, pos, sv_id, ref, alt = f[0], int(f[1]), f[2], f[3], f[4]
+        m = re.search(r"([\[\]])([^\[\]:]+):(\d+)([\[\]])", alt)
+        if not m:
+            continue
+        bracket_first = alt.startswith(("[", "]"))
+        own = "right" if bracket_first else "left"          # t[p[ / t]p] keep left of t
+        mate = "right" if m.group(1) == "[" else "left"     # [p[ joins right of p
+        bases = re.sub(r"[\[\]][^\[\]]*[\[\]]", "", alt)
+        insertion = bases[len(ref):] if not bracket_first else bases[:-len(ref)]
+        out[sv_id] = {"chrom1": chrom, "pos1": pos, "side1": own,
+                      "chrom2": m.group(2), "pos2": int(m.group(3)), "side2": mate,
+                      "insertion": insertion, "same_orientation": (own == mate)}
+    return out
+
+
 def cds_blocks(t) -> list[tuple[int, int]]:
     """Coding blocks in transcript (5'->3') order, genomic, inclusive."""
     blocks = sorted(t.coding_sequence_position_ranges)
@@ -158,9 +181,60 @@ def rebuild(t, ev: dict, svtype: str) -> tuple[str, str | None]:
             idx = blocks.index(inside[-1]) + 1
             dup = blocks[:idx] + inside + blocks[idx:]
             return "exon_duplication", translate(genomic_seq(t, dup) + utr3, native_start=True)
+    if svtype == "DUP" and r1 == "CDS" and r2 == "CDS":
+        status, protein = rebuild_exonic_dup(t, ev)
+        if status:
+            return status, protein
     if svtype == "DUP" and r1 == "intron" and r2 == "intron" and i1 == i2:
         return "same_intron", t.protein_sequence
     return f"not_modelled ({svtype} {r1}/{r2})", None
+
+
+def part_of(t, side: str) -> str:
+    """Which part of its transcript a breakend contributes, from the kept side."""
+    return "5" if (t.strand == "+") == (side == "left") else "3"
+
+
+def intronic_half(t, pos: int, part: str) -> str:
+    """Coding sequence a transcript contributes when cut in an intron at pos."""
+    blocks = cds_blocks(t)
+    if t.strand == "+":
+        keep = [b for b in blocks if (b[1] < pos if part == "5" else b[0] > pos)]
+    else:
+        keep = [b for b in blocks if (b[0] > pos if part == "5" else b[1] < pos)]
+    return genomic_seq(t, keep)
+
+
+def rebuild_fusion(t1, t2, br: dict) -> tuple[str, str | None]:
+    r1, _ = region(t1, br["pos1"])
+    r2, _ = region(t2, br["pos2"])
+    if not (r1 == "intron" and r2 == "intron"):
+        return f"not_modelled (fusion {r1}/{r2})", None
+    p1, p2 = part_of(t1, br["side1"]), part_of(t2, br["side2"])
+    if {p1, p2} != {"5", "3"}:
+        return "fusion_no_product", ""
+    five, fpos, three, tpos = ((t1, br["pos1"], t2, br["pos2"]) if p1 == "5"
+                               else (t2, br["pos2"], t1, br["pos1"]))
+    nt = (intronic_half(five, fpos, "5") + intronic_half(three, tpos, "3")
+          + (three.three_prime_utr_sequence or ""))
+    return "fusion_intronic", translate(nt, native_start=True)
+
+
+def rebuild_exonic_dup(t, ev: dict) -> tuple[str, str | None]:
+    """Tandem duplication of [pos1, pos2] with both ends in coding exons."""
+    p1, p2 = ev["pos1"], ev["pos2"]
+    if region(t, p1)[0] != "CDS" or region(t, p2)[0] != "CDS":
+        return None, None
+    blocks = sorted(t.coding_sequence_position_ranges)
+    upto = [(s, min(e, p2)) for s, e in blocks if s <= p2]          # ..., up to pos2
+    after = [(max(s, p1), e) for s, e in blocks if e >= p1]        # from pos1, ...
+    if t.strand == "+":
+        ins = ev["insertion"]
+        nt = genomic_seq(t, upto) + ins + genomic_seq(t, after)
+    else:
+        ins = str(Seq(ev["insertion"]).reverse_complement())
+        nt = (genomic_seq(t, after[::-1]) + ins + genomic_seq(t, upto[::-1]))
+    return "exonic_duplication", translate(nt + (t.three_prime_utr_sequence or ""), True)
 
 
 def main() -> None:
@@ -181,7 +255,9 @@ def main() -> None:
     for k, run in enumerate(args.run_dir):
         peps = pd.read_csv(next(run.glob("*.all_neopeptides.txt")), sep="\t", low_memory=False)
         vdir = args.vcf_dir[k] if args.vcf_dir else run
-        vcf = read_vcf_events(next(vdir.glob("*.admitted.vcf")))
+        vcf_path = next(vdir.glob("*.admitted.vcf"))
+        vcf = read_vcf_events(vcf_path)
+        breakends = read_vcf_breakends(vcf_path)
         same = peps[(peps["gene1"] == peps["gene2"]) & peps["svtype"].isin(["DEL", "DUP"])]
         for sv_id, g in same.groupby("sv_id"):
             ev = vcf.get(str(sv_id))
@@ -200,6 +276,37 @@ def main() -> None:
                 "sample": run.name, "sv_id": sv_id, "gene": g["gene1"].iloc[0],
                 "transcript": t.transcript_id, "svtype": g["svtype"].iloc[0],
                 "model": status, "verdict": verdict,
+                "n_generated": len(generated),
+                "n_expected": None if expected is None else len(expected),
+                "only_generated": "" if expected is None else ";".join(sorted(generated - expected)[:5]),
+                "only_expected": "" if expected is None else ";".join(sorted(expected - generated)[:5]),
+            })
+        other = peps[peps["gene1"] != peps["gene2"]]
+        for sv_id, g in other.groupby("sv_id"):
+            br = breakends.get(str(sv_id))
+            t1 = genome.transcript_by_id(g["transcript_id1"].iloc[0])
+            t2 = genome.transcript_by_id(g["transcript_id2"].iloc[0])
+            generated = set(g["neopeptide"])
+            if br is None:
+                status, protein = "no VCF record", None
+            else:
+                # the peptide table's breakend 1 is the lower-coordinate / first
+                # record; align the VCF record to it
+                if str(br["pos1"]) != str(g["pos1"].iloc[0]):
+                    br = {"pos1": br["pos2"], "side1": br["side2"],
+                          "pos2": br["pos1"], "side2": br["side1"]}
+                status, protein = rebuild_fusion(t1, t2, br)
+            wt = windows(t1.protein_sequence or "") | windows(t2.protein_sequence or "")
+            if protein is None:
+                expected, verdict = None, "not compared"
+            else:
+                expected = windows(protein) - wt
+                verdict = "agree" if expected == generated else "DISAGREE"
+            rows.append({
+                "sample": run.name, "sv_id": sv_id,
+                "gene": f"{g['gene1'].iloc[0]}>{g['gene2'].iloc[0]}",
+                "transcript": f"{t1.transcript_id};{t2.transcript_id}",
+                "svtype": g["svtype"].iloc[0], "model": status, "verdict": verdict,
                 "n_generated": len(generated),
                 "n_expected": None if expected is None else len(expected),
                 "only_generated": "" if expected is None else ";".join(sorted(generated - expected)[:5]),
