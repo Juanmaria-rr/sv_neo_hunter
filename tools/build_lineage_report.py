@@ -134,6 +134,8 @@ def funnel(t: pd.DataFrame, lines: list[str]) -> pd.DataFrame:
             mf = flag(t, "presentable_mhcflurry")
             base = conj_without_pres(t)
             row["pres_mf"] = int((a & qc & mf).sum())
+            row["pres_any"] = int((a & qc & (mf | flag(t, "presentable"))).sum())
+            row["pres_both"] = int((a & qc & mf & flag(t, "presentable")).sum())
             row["conj_mf"] = int((a & base & mf).sum())
             row["conj_both"] = int((a & conj & mf).sum())
             row["conj_any"] = int((a & (conj | (base & mf))).sum())
@@ -504,11 +506,14 @@ Every junction then yields a fusion protein and every 8–11-residue window acro
     spec += [(k, lab, "marginal") for k, (lab, _) in CRITERIA.items()]
     two = "pres_mf" in fun.columns
     if two:
-        spec += [("pres_mf", "presentable by the line's own HLA (MHCflurry)", "marginal")]
+        spec += [("pres_mf", "presentable by the line's own HLA (MHCflurry)", "marginal"),
+                 ("pres_any", "presentable by either predictor", "marginal"),
+                 ("pres_both", "presentable by both predictors", "marginal")]
     spec += [("conjunction", "all at once — presentable by netMHCpan" if two
               else "all of the above at once", "conjunction")]
     if two:
         spec += [("conj_mf", "all at once — presentable by MHCflurry", "conjunction"),
+                 ("conj_any", "all at once — presentable by either predictor", "conjunction"),
                  ("conj_both", "all at once — presentable by both predictors", "conjunction")]
     for key, label, kind in spec:
         cells = [f"{label} {f'<span class=tag>{kind}</span>' if kind else ''}"]
@@ -525,7 +530,7 @@ against that set, not against the row above it, so the marginal rows do not form
 pipeline and one can exceed another.</p>
 {table(["step"] + [chip(l, colour[l]) for l in lines], frows)}
 {method("Peptides acquired by each line. Bars are the share of that line's own acquired candidates, so they compare proportions between lines and never absolute numbers.",
-        f"<code>is_self</code>: exact substring of the Ensembl proteome. <code>low_complexity</code>: entropy, dominant residue, homopolymer or distinct-residue rule. <code>sv_hc</code>: segment MAPQ ≥ {C.HC_MIN_SEGMAPQ}, ≥ {C.HC_MIN_VF} supporting fragments, QUAL ≥ {C.HC_MIN_QUAL}. <code>expressed</code>: both partners above the TPM floor. RNA: <code>rna_tier</code> ∈ {{{', '.join(RNA_CROSSING)}}}, i.e. reads that <i>cross</i> the junction by the mechanism the junction's geometry allows. <code>presentable</code>: IC50 ≤ 500 nM AND %Rank_BA ≤ 2 AND %Rank_EL ≤ 2 for ≥ 1 of the line's own class I alleles (netMHCpan 4.2e). <code>presentable_mhcflurry</code>: affinity ≤ 500 nM AND presentation percentile ≤ 2 for ≥ 1 own allele (MHCflurry 2.2.1 presentation model). The conjunctions are the <code>credible_and_presentable</code>, <code>credible_and_presentable_mhcflurry</code> and <code>credible_and_presentable_both</code> views; the per-line verdict and section 4 count a peptide that survives with either predictor, and say which.",
+        f"<code>is_self</code>: exact substring of the Ensembl proteome. <code>low_complexity</code>: entropy, dominant residue, homopolymer or distinct-residue rule. <code>sv_hc</code>: segment MAPQ ≥ {C.HC_MIN_SEGMAPQ}, ≥ {C.HC_MIN_VF} supporting fragments, QUAL ≥ {C.HC_MIN_QUAL}. <code>expressed</code>: both partners above the TPM floor. RNA: <code>rna_tier</code> ∈ {{{', '.join(RNA_CROSSING)}}}, i.e. reads that <i>cross</i> the junction by the mechanism the junction's geometry allows. <code>presentable</code>: IC50 ≤ 500 nM AND %Rank_BA ≤ 2 AND %Rank_EL ≤ 2 for ≥ 1 of the line's own class I alleles (netMHCpan 4.2e). <code>presentable_mhcflurry</code>: affinity ≤ 500 nM AND presentation percentile ≤ 2 for ≥ 1 own allele (MHCflurry 2.2.1 presentation model). Four presentability criteria, each with its conjunction view: netMHCpan (<code>credible_and_presentable</code>), MHCflurry (<code>_mhcflurry</code>), either predictor (<code>_either</code>) and both (<code>_both</code>). None is ranked above the others: requiring both is stricter, not better — the two predictors disagree on many peptides and neither is a measurement, so a peptide presented by only one is a candidate, not a reject. The per-line verdict and section 4 use the either-predictor conjunction and state which predictor presents each peptide.",
         "Overlapping windows are not independent: a share per peptide should be re-checked per event (section 4 does). The marginal rows say nothing about what survives alongside them. Predicted binding is not presentation.")}
 """)
 

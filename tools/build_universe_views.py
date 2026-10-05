@@ -89,7 +89,17 @@ VIEWS: dict[str, tuple] = {
                        ["STRONG", "SUGGESTIVE"])
                    & flag(t, "presentable") & flag(t, "presentable_mhcflurry")),
         "The conjunction with BOTH predictors calling the peptide presentable — the "
-        "subset that does not depend on the choice of predictor."),
+        "subset that does not depend on the choice of predictor. Stricter, not "
+        "better: see `credible_and_presentable_either`."),
+    "credible_and_presentable_either": (
+        lambda t: (~flag(t, "is_self") & ~flag(t, "low_complexity")
+                   & flag(t, "sv_hc") & flag(t, "expressed")
+                   & t.get("rna_tier", pd.Series(dtype=str)).isin(
+                       ["STRONG", "SUGGESTIVE"])
+                   & (flag(t, "presentable") | flag(t, "presentable_mhcflurry"))),
+        "The conjunction with EITHER predictor calling the peptide presentable. The "
+        "predictors disagree on many peptides and neither is a measurement, so a "
+        "peptide presented by only one is still a candidate."),
     "in_reference_cohort": (
         lambda t: flag(t, "matched_reference"),
         "Candidates that ALSO appear in the reference cohort. The recurrence "
