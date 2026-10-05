@@ -87,7 +87,7 @@ JUNCTION_COLUMNS = [
     # other events of the same run before believing such a candidate.
     "nearest_alt_sj_bp", "alt_sj_frags", "alt_sj_type", "alt_sj_within_window",
     "retained_intron", "isofox_fusion", "isofox_fusion_support",
-    "gene1_TPM", "gene2_TPM",
+    "gene1_TPM", "gene2_TPM", "isoform1_TPM", "isoform2_TPM",
 ]
 
 
