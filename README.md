@@ -20,7 +20,8 @@ is built to tell them apart and to make the attrition at every step explicit.
 [Peptide generation](docs/PEPTIDE_GENERATION.md) ·
 [Running and reviewing](docs/USAGE.md) ·
 [Threshold provenance](docs/PROVENANCE.md) ·
-[MHC binding method](docs/METHOD_mhc_propagation.md)
+[MHC binding method](docs/METHOD_mhc_propagation.md) ·
+[HLA typing](docs/HLA_TYPING.md)
 
 ## How it works
 

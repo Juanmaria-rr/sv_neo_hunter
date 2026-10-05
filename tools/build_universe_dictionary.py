@@ -993,9 +993,15 @@ def main() -> None:
                                     "n_rows", "n_patients")):
                 stage, level = "stages 3-5 (cohort)", "catalogue comparison"
                 kind, source = "annotation — does NOT filter", "the reference catalogue"
-                rule = ("Cohort-side column, populated only where "
-                        "`matched_reference` is True. Empty means the question "
-                        "was not asked, not that the answer was no.")
+                # The column's own meaning must lead. This branch once put the
+                # shared caveat here instead, and `adds_nothing` then dropped the
+                # (shorter) specific meaning — 21 columns ended up with one
+                # identical explanation and none of their own.
+                caveat = ("Cohort-side column, populated only where "
+                          "`matched_reference` is True. Empty means the question "
+                          "was not asked, not that the answer was no.")
+                rule = f"{meaning} {caveat}" if meaning else caveat
+                meaning = ""
             else:
                 stage, level, kind = "", "", "annotation"
                 source, rule = "", "No threshold."
@@ -1033,11 +1039,14 @@ def main() -> None:
         glossary_path, sep="\t", index=False)
 
     missing = out[out["what_it_is"] == ""]["column"].tolist()
+    # A definition shared verbatim by several columns explains none of them.
+    shared = out[out["what_it_is"].duplicated(keep=False)]["column"].tolist()
     print(f"  {len(out)} columns -> {args.out}")
     print(f"  {len(GLOSSARY)} glossary terms -> {glossary_path}")
     print(f"  second note kept only where it adds something: "
           f"{int((out['also_noted'] != '').sum())}/{len(out)}")
     print(f"  without a definition: {missing or 'none'}")
+    print(f"  sharing a definition verbatim with another column: {shared or 'none'}")
     print(f"  with an explicit threshold: "
           f"{int((~out.what_it_is.str.startswith('No threshold')).sum())}")
     print("\n  by level:")

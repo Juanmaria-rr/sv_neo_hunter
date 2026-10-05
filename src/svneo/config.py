@@ -52,6 +52,9 @@ class Sample:
     isofox_dir: str | None = None
     isofox_prefix: str | None = None
     dna_bam: str | None = None
+    #: PURPLE output directory for this sample (somatic run against the root).
+    #: Only HLA typing uses it, to call allele-specific copy number and loss.
+    purple_dir: str | None = None
     notes: str = ""
 
     @property

@@ -1,0 +1,7 @@
+# OptiType for tools/run_optitype.py (independent class I HLA call).
+name: svneo_optitype
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - optitype=1.5.0

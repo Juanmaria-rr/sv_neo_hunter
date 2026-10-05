@@ -31,6 +31,19 @@ resources:
   pyensembl_cache: /path/to/pyensembl_cache
   gnomad_sv: /path/to/gnomad.v4.1.sv.sites.vcf.gz   # null -> PON-only privacy,
                                                      # flagged in privacy_note
+  # Optional: class I HLA typing of the samples (tools/run_lilac.py, LILAC 1.6,
+  # as in nf-core/oncoanalyser 2.0.0). See docs/HLA_TYPING.md.
+  # lilac:
+  #   jar: /path/to/lilac_v1.6.jar
+  #   resource_dir: /path/to/hmf_pipeline_resources.38/misc/lilac
+  #   slice_bed: /path/to/grch38_alt.plus_homologous.bed
+  #   chr6_fasta: /path/to/chr6.fa        # bwa-mem2 indexed, same build as the BAMs
+  #   samtools: /path/to/samtools         # optional: else the active env / PATH
+  #   bwa-mem2: /path/to/bwa-mem2
+  #   java_xmx: 8G
+  # optitype:                         # independent check, tools/run_optitype.py
+  #   bin: /path/to/envs/svneo_optitype/bin
+  #   threads: 8
 
 # Sensitivity branches. Differ ONLY in stage-1 admission so any difference in the
 # result is attributable to admission. Use one branch if you do not need the
@@ -59,6 +72,7 @@ samples:
     isofox_dir: /path/to/isofox/sample_B
     isofox_prefix: sample_B-RNA.isf
     dna_bam: /path/to/sample_B.dna.bam
+    purple_dir: /path/to/purple/sample_B   # optional: HLA allele copy number / loss
     notes: free text, carried into the report
 
 # Optional threshold overrides. Anything set here is echoed into every manifest,

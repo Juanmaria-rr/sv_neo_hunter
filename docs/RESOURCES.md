@@ -20,6 +20,9 @@ to look settled.
 | pyensembl | 2.10.1 | transcript annotation lookups |
 | netMHCpan | **4.2e** | licensed (DTU Health Tech), academic use, redistribution not permitted. Obtain per machine; `tools/run_netmhcpan.py` locates it and explains the setup if absent. Earlier results in this project used **4.1** — the two are not interchangeable, see `docs/`. |
 
+| LILAC | **1.6** (hmftools `lilac-v1.6` jar) | HLA class I typing, `tools/run_lilac.py`; the version in nf-core/oncoanalyser 2.0.0. Java ≥ 11. |
+| bwa-mem2, samtools | 2.2.1, 1.21 | HLA read realignment for LILAC; `envs/hla_typing.yml` |
+
 Recreate the environment with:
 
     conda env create -f environment.yml
@@ -38,6 +41,9 @@ Recreate the environment with:
 |---|---|---|
 | Ensembl | **release 115**, GRCh38 | `pyensembl install --release 115 --species homo_sapiens`. The proteome used for the self test is the same release's `pep.all`. |
 | gnomAD-SV | **v4.1** | matched by 0.5 reciprocal overlap; the nine ancestry groups in `criteria.GNOMAD_POPULATIONS` |
+| LILAC resources | `misc/lilac/` from `hmf_pipeline_resources.38_v2.0.0--3.tar.gz` (oncoanalyser 2.0.0 default) | extract only that directory: `curl -sL <url> \| tar -xzf - --include='*misc/lilac/*'` |
+| HLA slice BED | `grch38_alt.plus_homologous.bed` (oncoanalyser `HLA_SLICE_BED_GRCH38_ALT_PATH`) | regions sliced before realignment |
+| chr6 for realignment | chr6 of `GRCh38_masked_exclusions_alts_hlas.fasta`, HMF genomes 25.1 | byte-range extract using the published `.fai`; must match the genome the BAMs were aligned to |
 | Common fragile sites | two catalogues, conservative and permissive | passed as BED paths; their genome footprints are measured at run time and written into `CFS_ANNOTATION_PROVENANCE.tsv`, because a hit rate cannot be read without them |
 
 ## Panel of normals — **size unknown, and it matters**

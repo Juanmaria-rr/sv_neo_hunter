@@ -1,0 +1,10 @@
+# Tools for tools/run_lilac.py (read slicing and realignment onto chr6).
+# LILAC itself is a Java jar (hmftools lilac-v1.6, Java >= 11), configured
+# under resources.lilac.jar — not installed through this file.
+name: svneo_hla
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - bwa-mem2=2.2.1
+  - samtools=1.21
