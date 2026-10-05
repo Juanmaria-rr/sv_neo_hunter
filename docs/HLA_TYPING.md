@@ -66,6 +66,26 @@ existing `hla_genotypes.tsv`.
   coverage, unmatched fragments, discordant pairs). Read its QC file before using
   the genotype.
 
+## Independent check: OptiType
+
+`tools/run_optitype.py` runs OptiType 1.5.0 on the same reads — the realigned DNA
+pairs, and the RNA BAM sliced to the same regions — and writes
+`hla_concordance.tsv`, one row per (sample, gene):
+
+| status | meaning |
+|---|---|
+| `confirmed` | LILAC and OptiType on DNA give the same two alleles (two-field) |
+| `resolved — one method discordant…` | OptiType on DNA disagrees, but OptiType on RNA, LILAC **and** the lineage root's confirmed genotype agree. A derived sample cannot change a germline allele except by somatic mutation (which LILAC reports), so the lone call is that method's error |
+| `DISCORDANT — external typing needed` | anything else; resolve by clinical (SBT/NGS) typing before using that gene's alleles |
+
+Two-field normalisation keeps expression suffixes (`N`, `L`, `S`, …): a null allele
+is never equated with its expressed namesake. Use `--reuse` to type only what is
+missing and `--concordance-only` to rebuild the table after LILAC finishes.
+
+OptiType on RNA is slow: the solver scales with the number of HLA reads, and a
+transcribed locus yields tens of thousands (minutes to tens of minutes per sample,
+against ~30 s for DNA).
+
 ## Limitations
 
 - RNA BAMs are used as aligned (as oncoanalyser does). RNA reads that the aligner

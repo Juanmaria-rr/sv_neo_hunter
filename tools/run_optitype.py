@@ -119,7 +119,8 @@ def lilac_alleles(hla_dir: pathlib.Path) -> pd.DataFrame:
     return t
 
 
-def concordance(geno: pd.DataFrame, lilac: pd.DataFrame) -> pd.DataFrame:
+def concordance(geno: pd.DataFrame, lilac: pd.DataFrame,
+                roots: dict[str, str] | None = None) -> pd.DataFrame:
     rows = []
     for sample in sorted(set(geno["sample"]) | set(lilac.get("sample", []))):
         for gene in GENES:
@@ -145,7 +146,28 @@ def concordance(geno: pd.DataFrame, lilac: pd.DataFrame) -> pd.DataFrame:
                              "DISCORDANT — external typing needed" if rec["dna_concordant"] is False
                              else "single method")
             rows.append(rec)
-    return pd.DataFrame(rows)
+    out = pd.DataFrame(rows)
+    return lineage_check(out, roots or {})
+
+
+def lineage_check(conc: pd.DataFrame, roots: dict[str, str]) -> pd.DataFrame:
+    """A derived sample cannot change a germline allele except by somatic mutation,
+    so its genotype should equal the root's. One method disagreeing, while the other
+    methods on that sample AND the confirmed root genotype agree, is that method's
+    error — not an uncertain genotype. Anything else stays flagged."""
+    if not len(conc):
+        return conc
+    root_geno = {(r.sample, r.gene): r.genotype for r in conc.itertuples()
+                 if r.status == "confirmed"}
+    conc["root_sample"] = conc["sample"].map(lambda s: roots.get(s, s))
+    conc["matches_root"] = [root_geno.get((r.root_sample, r.gene)) == r.genotype
+                            if (r.root_sample, r.gene) in root_geno else None
+                            for r in conc.itertuples()]
+    fix = ((conc["dna_concordant"] == False) & (conc["rna_concordant"] == True)  # noqa: E712
+           & (conc["matches_root"] == True) & (conc["root_sample"] != conc["sample"]))  # noqa: E712
+    conc.loc[fix, "status"] = ("resolved — one method discordant; the sample's other "
+                               "methods and the root's confirmed genotype agree")
+    return conc
 
 
 def main() -> None:
@@ -154,18 +176,21 @@ def main() -> None:
     p.add_argument("--hla-dir", required=True, type=pathlib.Path)
     p.add_argument("--samples", nargs="*", default=None)
     p.add_argument("--no-rna", action="store_true")
+    p.add_argument("--reuse", action="store_true",
+                   help="keep existing <sample>_result.tsv files; type only what is missing")
     p.add_argument("--concordance-only", action="store_true",
                    help="rebuild hla_concordance.tsv from existing outputs, e.g. after LILAC finishes")
     args = p.parse_args()
 
+    cfg = load_config(args.config)
+    roots = {x.name: ([x.name] + cfg.ancestors(x.name))[-1] for x in cfg.samples}
     if args.concordance_only:
         geno = pd.read_csv(args.hla_dir / "optitype_genotypes.tsv", sep="\t")
-        conc = concordance(geno, lilac_alleles(args.hla_dir))
+        conc = concordance(geno, lilac_alleles(args.hla_dir), roots)
         conc.to_csv(args.hla_dir / "hla_concordance.tsv", sep="\t", index=False)
         print(conc.to_string(index=False), file=sys.stderr)
         return
 
-    cfg = load_config(args.config)
     ot = cfg.resources.get("optitype") or sys.exit("  config has no resources.optitype block")
     lil = cfg.resources.get("lilac") or {}
     bin_dir = ot.get("bin") or sys.exit("  resources.optitype.bin is required")
@@ -189,6 +214,15 @@ def main() -> None:
         for source, bam, regions in sources:
             out = base / source
             log = out / "optitype.log"
+            result = out / f"{s.name}_result.tsv"
+            if args.reuse and result.exists():
+                print(f"  {s.name} {source}: reusing {result}", file=sys.stderr)
+                r = pd.read_csv(result, sep="\t", index_col=0).iloc[0].to_dict()
+                rows.append({"sample": s.name, "source": source, **r})
+                prov.append({"key": f"input[{s.name},{source}]", "value": bam})
+                continue
+            if (out / "work").exists():
+                shutil.rmtree(out / "work")      # left by an interrupted run
             out.mkdir(parents=True, exist_ok=True)
             print(f"\n── {s.name} {source}", file=sys.stderr)
             r1, r2 = to_fastq(bam, out / "work", samtools, threads, log, env, regions)
@@ -200,7 +234,7 @@ def main() -> None:
 
     geno = pd.DataFrame(rows)
     geno.to_csv(args.hla_dir / "optitype_genotypes.tsv", sep="\t", index=False)
-    conc = concordance(geno, lilac_alleles(args.hla_dir))
+    conc = concordance(geno, lilac_alleles(args.hla_dir), roots)
     conc.to_csv(args.hla_dir / "hla_concordance.tsv", sep="\t", index=False)
 
     version = subprocess.run([os.path.join(bin_dir, "optitype"), "--version"],
