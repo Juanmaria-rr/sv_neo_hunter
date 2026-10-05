@@ -70,6 +70,26 @@ VIEWS: dict[str, tuple] = {
         "with junction-crossing RNA reads, and presentable by the line's own "
         "MHC. Check each survivor against `nearest_alt_sj_bp` before believing "
         "it — a breakpoint beside a splice site inherits that site's reads."),
+    "presentable_mhcflurry": (
+        lambda t: flag(t, "presentable_mhcflurry"),
+        "Binds at least one allele of the lineage's own genotype according to "
+        "MHCflurry. The counterpart of `presentable` (netMHCpan)."),
+    "credible_and_presentable_mhcflurry": (
+        lambda t: (~flag(t, "is_self") & ~flag(t, "low_complexity")
+                   & flag(t, "sv_hc") & flag(t, "expressed")
+                   & t.get("rna_tier", pd.Series(dtype=str)).isin(
+                       ["STRONG", "SUGGESTIVE"])
+                   & flag(t, "presentable_mhcflurry")),
+        "The same conjunction as `credible_and_presentable`, with MHCflurry deciding "
+        "presentability instead of netMHCpan."),
+    "credible_and_presentable_both": (
+        lambda t: (~flag(t, "is_self") & ~flag(t, "low_complexity")
+                   & flag(t, "sv_hc") & flag(t, "expressed")
+                   & t.get("rna_tier", pd.Series(dtype=str)).isin(
+                       ["STRONG", "SUGGESTIVE"])
+                   & flag(t, "presentable") & flag(t, "presentable_mhcflurry")),
+        "The conjunction with BOTH predictors calling the peptide presentable — the "
+        "subset that does not depend on the choice of predictor."),
     "in_reference_cohort": (
         lambda t: flag(t, "matched_reference"),
         "Candidates that ALSO appear in the reference cohort. The recurrence "

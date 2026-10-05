@@ -125,14 +125,19 @@ def self_peptide_flags(peptides: pd.Series, proteome: str | None) -> pd.Series:
     return flags
 
 
-def read_binding(path: pathlib.Path) -> dict[str, dict[str, dict]]:
+def read_binding(path: pathlib.Path, thresholds: dict | None = None,
+                 label: str = "netMHCpan") -> dict[str, dict[str, dict]]:
     """peptide -> {allele: {margin, cut, allele}} for rows passing every cut.
 
     The binder rule and the margin are the same ones the patient-side analysis
     uses, imported rather than restated so a peptide cannot be a binder in one
-    table and not the other.
+    table and not the other. `thresholds` selects the predictor's rule
+    (default: netMHCpan's); the margin is computed the same way for any rule.
     """
-    from run_netmhcpan import BINDER_THRESHOLDS
+    if thresholds is None:
+        from run_netmhcpan import BINDER_THRESHOLDS
+    else:
+        BINDER_THRESHOLDS = thresholds
     binding: dict[str, dict[str, dict]] = {}
     frame = pd.read_csv(path, sep="\t", low_memory=False)
     for column in BINDER_THRESHOLDS:
@@ -146,7 +151,7 @@ def read_binding(path: pathlib.Path) -> dict[str, dict[str, dict]]:
         allele = str(row.allele).replace("*", "").upper()
         binding.setdefault(row.peptide, {})[allele] = {
             "margin": distances[cut], "cut": cut, "allele": allele}
-    print(f"  binding: {len(kept):,} of {len(frame):,} peptide-allele rows pass, "
+    print(f"  binding ({label}): {len(kept):,} of {len(frame):,} peptide-allele rows pass, "
           f"{len(binding):,} peptides bind >= 1 allele")
     return binding
 
@@ -183,6 +188,11 @@ def main() -> None:
                              "presentability columns; without it they are absent "
                              "rather than blank, because an unrun prediction and "
                              "a negative prediction are different facts.")
+    parser.add_argument("--mhcflurry-predictions", type=pathlib.Path,
+                        help="MHCflurry table for the same genotype, from "
+                             "tools/run_mhcflurry.py. Adds the same presentability "
+                             "columns with a `_mhcflurry` suffix, and "
+                             "`predictors_agree`. netMHCpan's columns are unchanged.")
     parser.add_argument("--origin", choices=["somatic", "parental", "both", "all"],
                         default="all",
                         help="restrict the catalogue to peptides of this origin. "
@@ -241,25 +251,35 @@ def main() -> None:
     # branch to confuse it with: the alleles ARE the line's genotype, so a binder
     # here is "this cell could present this peptide", not "somebody could".
     presentable = None
-    if args.predictions:
-        binding = read_binding(args.predictions)
-        table["n_alleles_binding"] = table[peptide_column].map(
+
+    def add_presentability(binding: dict, suffix: str) -> None:
+        """The same seven columns for any predictor; netMHCpan's carry no suffix."""
+        table[f"n_alleles_binding{suffix}"] = table[peptide_column].map(
             lambda p: len(binding.get(p, ())))
-        table["binding_alleles"] = table[peptide_column].map(
+        table[f"binding_alleles{suffix}"] = table[peptide_column].map(
             lambda p: ";".join(sorted(binding.get(p, ()))))
-        table["presentable"] = table["n_alleles_binding"] > 0
+        table[f"presentable{suffix}"] = table[f"n_alleles_binding{suffix}"] > 0
         best = table[peptide_column].map(
             lambda p: max(binding.get(p, {}).values(),
                           key=lambda v: v["margin"], default=None))
-        table["presentation_margin"] = [b["margin"] if b else "" for b in best]
-        table["presentation_limiting_cut"] = [b["cut"] if b else "" for b in best]
-        table["presentation_best_allele"] = [b["allele"] if b else "" for b in best]
-        table["presentation_robustness"] = [
+        table[f"presentation_margin{suffix}"] = [b["margin"] if b else "" for b in best]
+        table[f"presentation_limiting_cut{suffix}"] = [b["cut"] if b else "" for b in best]
+        table[f"presentation_best_allele{suffix}"] = [b["allele"] if b else "" for b in best]
+        table[f"presentation_robustness{suffix}"] = [
             "" if not b else
             "flippable" if b["margin"] <= 0.10 else
             "marginal" if b["margin"] <= 0.25 else
             "solid" if b["margin"] <= 0.50 else "robust" for b in best]
+
+    if args.predictions:
+        add_presentability(read_binding(args.predictions), "")
         presentable = table.drop_duplicates(peptide_column)
+    if args.mhcflurry_predictions:
+        from run_mhcflurry import BINDER_THRESHOLDS as MHCFLURRY_THRESHOLDS
+        add_presentability(read_binding(args.mhcflurry_predictions,
+                                        MHCFLURRY_THRESHOLDS, "MHCflurry"), "_mhcflurry")
+    if args.predictions and args.mhcflurry_predictions:
+        table["predictors_agree"] = table["presentable"] == table["presentable_mhcflurry"]
 
     if args.origin != "all":
         before = table[peptide_column].nunique()

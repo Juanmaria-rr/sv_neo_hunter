@@ -93,6 +93,11 @@ PEPTIDE_COLUMNS = [
     "presentable", "n_alleles_binding", "binding_alleles",
     "presentation_best_allele", "presentation_margin",
     "presentation_limiting_cut", "presentation_robustness",
+    # The same seven for MHCflurry, and whether the two predictors agree.
+    "presentable_mhcflurry", "n_alleles_binding_mhcflurry", "binding_alleles_mhcflurry",
+    "presentation_best_allele_mhcflurry", "presentation_margin_mhcflurry",
+    "presentation_limiting_cut_mhcflurry", "presentation_robustness_mhcflurry",
+    "predictors_agree",
 ]
 
 

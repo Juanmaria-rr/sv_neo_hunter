@@ -941,6 +941,52 @@ GLOSSARY: list[tuple[str, str]] = [
 PATIENT_SUFFIX = ("_patient",)
 
 
+from run_mhcflurry import BINDER_THRESHOLDS as MF                   # noqa: E402
+
+_MF_RULE = (f"Binder = affinity <= {MF['affinity_nM']:g} nM AND presentation percentile "
+            f"<= {MF['presentation_percentile']:g}, both at once (MHCflurry 2.2 presentation "
+            "model: affinity combined with antigen processing).")
+_SAME_AS = ("Same definition as the netMHCpan column `{0}`, computed from MHCflurry's "
+            "predictions instead. ")
+SPEC.update({
+    "presentable_mhcflurry": ("MHC layer", "prediction — MHCflurry", "verdict — does NOT filter",
+        "MHCflurry 2.2.1 against the line's own class I genotype",
+        "**Could this cell present the peptide, according to MHCflurry?** Binds >= 1 "
+        "allele of the line's OWN genotype. " + _MF_RULE + " A second, independent "
+        "predictor beside `presentable` (netMHCpan): the two are trained on overlapping "
+        "data, so agreement is robustness, not validation. **Predicted, never observed "
+        "presentation.**"),
+    "n_alleles_binding_mhcflurry": ("MHC layer", "prediction — MHCflurry", "measurement", "MHCflurry",
+        _SAME_AS.format("n_alleles_binding") + "How many of the line's six alleles bind it."),
+    "binding_alleles_mhcflurry": ("MHC layer", "prediction — MHCflurry", "annotation", "MHCflurry",
+        _SAME_AS.format("binding_alleles") + "Which alleles bind it, `;`-separated; empty "
+        "where `presentable_mhcflurry` is False."),
+    "presentation_best_allele_mhcflurry": ("MHC layer", "prediction — MHCflurry", "annotation", "MHCflurry",
+        _SAME_AS.format("presentation_best_allele") + "The allele furthest from failing "
+        "MHCflurry's cuts — the best case, not a typical one."),
+    "presentation_margin_mhcflurry": ("MHC layer", "derived from prediction", "measurement",
+        "distance to the two MHCflurry binder cuts",
+        _SAME_AS.format("presentation_margin") + "Distance to each cut as a fraction of "
+        "it, the smallest of the two, then the largest across binding alleles. Not "
+        "comparable in value with the netMHCpan margin, which has three cuts."),
+    "presentation_limiting_cut_mhcflurry": ("MHC layer", "derived from prediction", "annotation",
+        "argmin of the two distances",
+        _SAME_AS.format("presentation_limiting_cut") + "`affinity_nM` or "
+        "`presentation_percentile`; empty for non-binders."),
+    "presentation_robustness_mhcflurry": ("MHC layer", "derived from prediction", "verdict — does NOT filter",
+        "presentation_margin_mhcflurry, binned",
+        _SAME_AS.format("presentation_robustness") + "`flippable` (<=10% of a cut), "
+        "`marginal` (<=25%), `solid` (<=50%), `robust` (>50%)."),
+    "predictors_agree": ("MHC layer", "derived from prediction", "verdict — does NOT filter",
+        "presentable == presentable_mhcflurry",
+        "**Do netMHCpan and MHCflurry give the same presentability verdict?** True "
+        "when both call the peptide presentable or both do not. A presentable peptide "
+        "with `predictors_agree` False rests on one predictor only — read it as fragile, "
+        "like a `flippable` robustness. Agreement is not validation: the predictors share "
+        "much of their training data."),
+})
+
+
 def adds_nothing(rule: str, meaning: str) -> bool:
     """Is `meaning` already contained in `rule`?
 

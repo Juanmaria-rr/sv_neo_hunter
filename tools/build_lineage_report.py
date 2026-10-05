@@ -72,7 +72,7 @@ CRITERIA = {                                  # name -> (label, column test)
     "expr": ("both partner genes transcribed", lambda t: flag(t, "expressed")),
     "rna":  ("RNA reads cross the junction",
              lambda t: t["rna_tier"].isin(RNA_CROSSING)),
-    "pres": ("presentable by the line's own HLA", lambda t: flag(t, "presentable")),
+    "pres": ("presentable by the line's own HLA (netMHCpan)", lambda t: flag(t, "presentable")),
 }
 DEPTH_MAX_INTERVAL = 2_000_000   # beyond this the depth scan is slow and the
                                  # "interval" is a chromosome arm, not a lesion
@@ -107,6 +107,15 @@ def qc_mask(t):
     return ~flag(t, "is_self") & ~flag(t, "low_complexity")
 
 
+def conj_without_pres(t: pd.DataFrame) -> pd.Series:
+    """QC-clean and every criterion except presentability."""
+    m = qc_mask(t)
+    for key, (_, test) in CRITERIA.items():
+        if key != "pres":
+            m &= test(t)
+    return m
+
+
 def funnel(t: pd.DataFrame, lines: list[str]) -> pd.DataFrame:
     qc = qc_mask(t)
     conj = qc.copy()
@@ -121,6 +130,13 @@ def funnel(t: pd.DataFrame, lines: list[str]) -> pd.DataFrame:
         for key, (_, test) in CRITERIA.items():
             row[key] = int((a & qc & test(t)).sum())
         row["conjunction"] = int((a & conj).sum())
+        if "presentable_mhcflurry" in t:
+            mf = flag(t, "presentable_mhcflurry")
+            base = conj_without_pres(t)
+            row["pres_mf"] = int((a & qc & mf).sum())
+            row["conj_mf"] = int((a & base & mf).sum())
+            row["conj_both"] = int((a & conj & mf).sum())
+            row["conj_any"] = int((a & (conj | (base & mf))).sum())
         row["matched_reference"] = int((a & flag(t, "matched_reference")).sum())
         row["carried"] = int(carried_by(t, line).sum())
         rows.append(row)
@@ -174,6 +190,11 @@ def events(t: pd.DataFrame, mask: pd.Series) -> pd.DataFrame:
     }
     if "missing" in sub:
         agg["missing"] = ("missing", "first")
+    if "predictors" in sub:
+        agg["predictors"] = ("predictors", lambda s: (
+            f"netMHCpan {int(s.isin(['both', 'netMHCpan only']).sum())} · "
+            f"MHCflurry {int(s.isin(['both', 'MHCflurry only']).sum())} · "
+            f"both {int((s == 'both').sum())}") if (s != "").any() else "")
     return sub.groupby(["line", "sv_id"]).agg(**agg).reset_index()
 
 
@@ -380,7 +401,11 @@ def build(args) -> None:
     conj = qc.copy()
     for _, test in CRITERIA.values():
         conj &= test(t)
-    surv = events(t, conj)
+    mf_conj = (conj_without_pres(t) & flag(t, "presentable_mhcflurry")
+               if "presentable_mhcflurry" in t else pd.Series(False, index=t.index))
+    t["predictors"] = [("both" if a and b else "netMHCpan only" if a else
+                        "MHCflurry only" if b else "") for a, b in zip(conj, mf_conj)]
+    surv = events(t, conj | mf_conj)
     nm_mask = near_miss_mask(t)
     near = events(t, nm_mask)
     # A surviving event usually also has peptides that fail one criterion (most
@@ -413,6 +438,7 @@ def build(args) -> None:
     dkey = {(str(r.line), str(r.sv_id)): r for r in depth.itertuples()}
 
     S = []   # sections
+    N7 = 6 if args.omit_reference_cross else 7     # sections after the optional cross
     roots = [l for l in lines if not parents.get(l)]
 
     # ---------------------------------------------------------------- header
@@ -426,9 +452,9 @@ generated {date.today().isoformat()} · branch <code>{esc(args.branch)}</code> �
 universe <code>{sha16(upath)}</code> · contains results, not for publication</p>
 <nav><a href=#lineage>Lineage</a><a href=#admission>1 Admission</a><a href=#funnel>2 Funnel</a>
 <a href=#verdict>3 Verdict per line</a><a href=#survivors>4 Survivors</a>
-<a href=#nearmiss>5 Near misses</a><a href=#reference>6 Reference cohort</a>
-<a href=#notfiltered>7 Not filtered</a><a href=#limits>8 Limitations</a>
-<a href=#columns>9 Column guide</a><a href=#sources>Sources</a></nav>
+<a href=#nearmiss>5 Near misses</a>{'' if args.omit_reference_cross else '<a href=#reference>6 Reference cohort</a>'}
+<a href=#notfiltered>{N7} Not filtered</a><a href=#limits>{N7+1} Limitations</a>
+<a href=#columns>{N7+2} Column guide</a><a href=#sources>Sources</a></nav>
 
 <h2 id=lineage>Lineage, and the two counting bases</h2>
 <p>A derived line inherits its parent's genome, so every count exists on two bases,
@@ -476,7 +502,14 @@ Every junction then yields a fusion protein and every 8–11-residue window acro
             ("non_self", "not present in the normal proteome", "cumulative"),
             ("qc", "… and not low-complexity", "cumulative")]
     spec += [(k, lab, "marginal") for k, (lab, _) in CRITERIA.items()]
-    spec += [("conjunction", "all of the above at once", "conjunction")]
+    two = "pres_mf" in fun.columns
+    if two:
+        spec += [("pres_mf", "presentable by the line's own HLA (MHCflurry)", "marginal")]
+    spec += [("conjunction", "all at once — presentable by netMHCpan" if two
+              else "all of the above at once", "conjunction")]
+    if two:
+        spec += [("conj_mf", "all at once — presentable by MHCflurry", "conjunction"),
+                 ("conj_both", "all at once — presentable by both predictors", "conjunction")]
     for key, label, kind in spec:
         cells = [f"{label} {f'<span class=tag>{kind}</span>' if kind else ''}"]
         for l in lines:
@@ -492,7 +525,7 @@ against that set, not against the row above it, so the marginal rows do not form
 pipeline and one can exceed another.</p>
 {table(["step"] + [chip(l, colour[l]) for l in lines], frows)}
 {method("Peptides acquired by each line. Bars are the share of that line's own acquired candidates, so they compare proportions between lines and never absolute numbers.",
-        f"<code>is_self</code>: exact substring of the Ensembl proteome. <code>low_complexity</code>: entropy, dominant residue, homopolymer or distinct-residue rule. <code>sv_hc</code>: segment MAPQ ≥ {C.HC_MIN_SEGMAPQ}, ≥ {C.HC_MIN_VF} supporting fragments, QUAL ≥ {C.HC_MIN_QUAL}. <code>expressed</code>: both partners above the TPM floor. RNA: <code>rna_tier</code> ∈ {{{', '.join(RNA_CROSSING)}}}, i.e. reads that <i>cross</i> the junction by the mechanism the junction's geometry allows. <code>presentable</code>: IC50 ≤ 500 nM AND %Rank_BA ≤ 2 AND %Rank_EL ≤ 2 for ≥ 1 of the line's own class I alleles (netMHCpan 4.2e). The conjunction is the <code>credible_and_presentable</code> view.",
+        f"<code>is_self</code>: exact substring of the Ensembl proteome. <code>low_complexity</code>: entropy, dominant residue, homopolymer or distinct-residue rule. <code>sv_hc</code>: segment MAPQ ≥ {C.HC_MIN_SEGMAPQ}, ≥ {C.HC_MIN_VF} supporting fragments, QUAL ≥ {C.HC_MIN_QUAL}. <code>expressed</code>: both partners above the TPM floor. RNA: <code>rna_tier</code> ∈ {{{', '.join(RNA_CROSSING)}}}, i.e. reads that <i>cross</i> the junction by the mechanism the junction's geometry allows. <code>presentable</code>: IC50 ≤ 500 nM AND %Rank_BA ≤ 2 AND %Rank_EL ≤ 2 for ≥ 1 of the line's own class I alleles (netMHCpan 4.2e). <code>presentable_mhcflurry</code>: affinity ≤ 500 nM AND presentation percentile ≤ 2 for ≥ 1 own allele (MHCflurry 2.2.1 presentation model). The conjunctions are the <code>credible_and_presentable</code>, <code>credible_and_presentable_mhcflurry</code> and <code>credible_and_presentable_both</code> views; the per-line verdict and section 4 count a peptide that survives with either predictor, and say which.",
         "Overlapping windows are not independent: a share per peptide should be re-checked per event (section 4 does). The marginal rows say nothing about what survives alongside them. Predicted binding is not presentation.")}
 """)
 
@@ -500,7 +533,10 @@ pipeline and one can exceed another.</p>
     vrows = []
     for l in lines:
         q = int(fun.loc[l, "qc"])
-        n = int(fun.loc[l, "conjunction"])
+        n = int(fun.loc[l, "conj_any"]) if "conj_any" in fun.columns else int(fun.loc[l, "conjunction"])
+        split = (f" (netMHCpan {int(fun.loc[l, 'conjunction'])}, MHCflurry "
+                 f"{int(fun.loc[l, 'conj_mf'])}, both {int(fun.loc[l, 'conj_both'])})"
+                 if "conj_any" in fun.columns else "")
         s_ev = surv[surv.line == l]
         kept = [r for r in s_ev.itertuples() if (l, str(r.sv_id)) not in jkey]
         if n:
@@ -513,7 +549,7 @@ pipeline and one can exceed another.</p>
                 return (pon == pon and pon >= C.PON_MAX) or (af == af and af >= C.POPULATION_COMMON_AF)
             confirmed = [r for r in kept if in_dna(r)]
             private = [r for r in confirmed if not common(r)]
-            text = (f"<b>{n}</b> peptides from <b>{plural(len(s_ev), 'event')}</b> → "
+            text = (f"<b>{n}</b> peptides{split} from <b>{plural(len(s_ev), 'event')}</b> → "
                     f"<b>{len(kept)}</b> after judgements → <b>{len(confirmed)}</b> with the "
                     f"lesion confirmed by DNA depth → <b>{len(private)}</b> of those not common "
                     f"(PON &lt; {C.PON_MAX} and gnomAD popmax &lt; {C.POPULATION_COMMON_AF})")
@@ -544,7 +580,9 @@ pipeline and one can exceed another.</p>
                           f"{num(d.depth_inside,1)} / {num(d.depth_flank,1)} = <b>{num(d.depth_ratio,2)}</b><br><small>{esc(d.depth_verdict)}</small>"
                           if d is not None else "<span class=muted>not measured</span>")
             row = [chip(r.line, colour.get(r.line, "--line0")),
-                   f"<b>{esc(r.genes)}</b>" + (f"→{esc(r.gene2)}" if r.gene2 != r.genes else ""),
+                   f"<b>{esc(r.genes)}</b>" + (f"→{esc(r.gene2)}" if r.gene2 != r.genes else "")
+                   + (f"<br><small>presentable peptides: {esc(r.predictors)}</small>"
+                      if getattr(r, "predictors", "") else ""),
                    f"{esc(r.sv_id)}<br><small>{esc(r.svtype)} {num(r.event_size)} bp</small>",
                    num(r.peptides)]
             if with_missing:
@@ -613,7 +651,8 @@ this genotype cannot present, and DNA depth is not measured for them.</p>
               f"{100*fun.loc[l,'matched_reference']/fun.loc[l,'candidates']:.1f}%" if fun.loc[l, 'candidates'] else "—",
               ", ".join(sorted({f"{g}" for g in surv[(surv.line == l) & surv.matched_reference].genes})) or "—"]
              for l in lines]
-    S.append(f"""
+    if not args.omit_reference_cross:
+        S.append(f"""
 <h2 id=reference>6 · Cross against the reference patient cohort <span class=tag>no filter</span></h2>
 {table(["line", "acquired", "also in the reference cohort", "share", "survivor events matched"], rrows)}
 {method("Acquired peptides whose exact sequence also occurs in the reference patient catalogue (<code>matched_reference</code>).",
@@ -626,17 +665,17 @@ this genotype cannot present, and DNA depth is not measured for them.</p>
         f"{l}: {int((flag(t, 'pass_pon') == False)[acquired_by(t, l)].sum()):,} of {fun.loc[l,'candidates']:,} peptides on a junction failing the panel"
         for l in lines)
     S.append(f"""
-<h2 id=notfiltered>7 · What none of this filters on</h2>
+<h2 id=notfiltered>{N7} · What none of this filters on</h2>
 <ul>
 <li><b>The panel of normals.</b> Measured (<code>pon_count</code>, <code>pass_pon</code>) and not applied
 on this branch — {esc(pon_line)}. Filtering on it is a decision to take with <code>pon_count</code> in view.</li>
 <li><b>Population frequency.</b> <code>gnomad_af_popmax</code> and <code>is_highfreq_gnomad</code> are recorded;
 empty <code>gnomad_af_popmax</code> means no gnomAD record, not rarity.</li>
-<li><b>Membership of the patient cohort</b> (<code>matched_reference</code>).</li>
+{'' if args.omit_reference_cross else '<li><b>Membership of the patient cohort</b> (<code>matched_reference</code>).</li>'}
 <li><b>Fragile sites</b> (<code>cfs_*</code>) — annotated per breakend under two catalogues, neither selects.</li>
 <li><b>Junction usage</b> — a share whose denominator must be read with it.</li>
 </ul>
-<h2 id=limits>8 · Limitations</h2>
+<h2 id=limits>{N7+1} · Limitations</h2>
 <ul>
 <li><code>presentable</code> is predicted binding, not observed presentation: processing, transport,
 surface abundance and T-cell recognition are not addressed. Only immunopeptidomics would.</li>
@@ -669,7 +708,7 @@ aggregate magnitudes much less so.</li>
         groups.append(f"<h3>{esc(stage)} <span class=tag>{len(g)} columns</span></h3>"
                       + table(["column", "populated", "what it is", "derived from"], rows, "dict"))
     S.append(f"""
-<h2 id=columns>9 · Column guide — <code>candidate_universe.tsv</code></h2>
+<h2 id=columns>{N7+2} · Column guide — <code>candidate_universe.tsv</code></h2>
 <p>All {len(dictionary)} columns, grouped by the pipeline stage that produces them, rendered from
 <code>candidate_universe_column_dictionary.tsv</code> (which imports every threshold from the
 module that applies it, so the values cannot drift from the code). <i>Populated</i> is the share
@@ -719,6 +758,10 @@ def main() -> None:
     p.add_argument("--judgements", default=None)
     p.add_argument("--out", required=True)
     p.add_argument("--no-dna-depth", action="store_true")
+    p.add_argument("--omit-reference-cross", action="store_true",
+                   help="leave out the patient-cohort cross (section 6), e.g. while the "
+                        "reference catalogue was built with a generator the samples' "
+                        "peptides no longer share; the universe keeps the columns")
     build(p.parse_args())
 
 
