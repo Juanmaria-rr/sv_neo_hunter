@@ -106,7 +106,7 @@ def test_sa_tag_must_land_on_the_partner_not_just_its_chromosome():
     chromosome but 3-156 Mb from the partner breakend."""
     assert rna.sa_hits_partner("chr8,127700000,+,50M100S,60,0;", "8", 127700100)
     assert not rna.sa_hits_partner("chr8,3000000,+,50M100S,60,0;", "8", 127700100)
-    assert not rna.sa_hits_partner("chr12,125065102,+,50M,60,0;", "15", 68420999)
+    assert not rna.sa_hits_partner("chr12,50000000,+,50M,60,0;", "15", 40000000)
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +246,35 @@ def test_vendored_generator_is_present_and_licensed():
     assert os.path.exists(os.path.join(VENDOR_DIR, "LICENSE.NeoSV")), \
         "MIT licence must ship with the vendored copy"
     assert os.path.exists(os.path.join(VENDOR_DIR, "VENDOR.md"))
+
+
+def test_intronic_junction_insertion_is_not_coding():
+    """Patch 003: bases inserted at a junction enter the fusion CDS only when both
+    breakends cut inside coding exons. Built on synthetic CDS collections so it
+    needs no Ensembl download."""
+    import sys
+    from svneo.generators.neosv import VENDOR_DIR
+    sys.path.insert(0, VENDOR_DIR)
+    from neosv.fusion_class import CDS, SVFusion
+
+    class Tx:
+        strand = "+"
+
+    class Coll:
+        def __init__(self, part, intact):
+            self.part, self.transcript, self.strand = part, Tx(), "+"
+            self.cdslist = [CDS(1, 10, True, False, False), CDS(20, 30, intact, False, False)] \
+                if part == "5" else [CDS(40, 50, intact, False, False), CDS(60, 70, True, False, False)]
+
+    class Sv:
+        insertion = "GA"
+
+    intronic = SVFusion(Sv(), Coll("5", True), Coll("3", True))
+    assert intronic.nt_sequence_ins == "", "intronic junction kept its inserted bases"
+    exonic = SVFusion(Sv(), Coll("5", False), Coll("3", False))
+    assert exonic.nt_sequence_ins == "GA", "coding junction lost its inserted bases"
+    assert (pathlib.Path(VENDOR_DIR) / "patches" /
+            "003-intronic-junction-insertion.patch").exists()
 
 
 def test_frame_patch_is_applied():

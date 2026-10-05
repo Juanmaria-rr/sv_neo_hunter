@@ -146,7 +146,28 @@ class SVFusion(object):
             return True
 
     @property
+    def junction_in_cds(self):
+        # PATCHED (see vendor/patches/003-intronic-junction-insertion.md).
+        # True only when BOTH breakends cut inside a coding exon. truncate_cds
+        # marks the exon a breakpoint falls in with intact=False; an intronic or
+        # UTR breakpoint leaves every retained exon intact.
+        def cut(cc):
+            if not cc.cdslist:
+                return False
+            edge = cc.cdslist[-1] if cc.part == '5' else cc.cdslist[0]
+            return not edge.intact
+        return cut(self.cc_1) and cut(self.cc_2)
+
+    @property
     def nt_sequence_ins(self):
+        # PATCHED (see vendor/patches/003-intronic-junction-insertion.md).
+        # Bases inserted at the junction belong to the mature transcript only if
+        # the junction itself is in coding sequence. When a breakpoint is
+        # intronic, the inserted bases lie in the intron and are spliced out
+        # with it; placing them between the two coding halves fabricates a
+        # frameshift (or in-frame insertion) the cell never makes.
+        if not self.junction_in_cds:
+            return ''
         # the insertion sequence is for the forward strand,
         # so should be adjusted by the direction of final transcript
         if self.cc_1.strand == '+':

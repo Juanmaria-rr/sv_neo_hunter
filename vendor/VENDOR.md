@@ -12,7 +12,7 @@ repository runs end to end without an external checkout or network access.
 |---|---|
 | Licence | **MIT**, Copyright (c) 2022 Yang Shi — see [`LICENSE.NeoSV`](LICENSE.NeoSV) |
 | Source | `NeoSV-main/neosv`, line endings normalised to LF |
-| Local modifications | **two patches** — see [`patches/`](patches/) |
+| Local modifications | **three patches** — see [`patches/`](patches/) |
 
 MIT permits modification and redistribution provided the copyright notice is
 retained. `LICENSE.NeoSV` is included for that purpose and must accompany any
@@ -32,6 +32,13 @@ The issue was identified and first corrected in
 [NeoSV-Trace](https://github.com/winterga/NeoSV-Trace) by Greyson Wintergerst.
 This repository applies the same correction to the MIT-licensed original rather
 than depending on the fork.
+
+[`003-intronic-junction-insertion`](patches/003-intronic-junction-insertion.md) —
+bases the caller reports as inserted at a junction were placed in the fusion coding
+sequence even when the junction is intronic, where they are spliced out. That
+fabricated frameshifts (or in-frame insertions) for deletions and duplications
+inside a single intron. They now enter the coding sequence only when both breakends
+cut inside a coding exon. Test: `test_intronic_junction_insertion_is_not_coding`.
 
 ## What this repository adds, and where
 
