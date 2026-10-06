@@ -41,6 +41,7 @@ Recreate the environment with:
 |---|---|---|
 | Ensembl | **release 115**, GRCh38 | `pyensembl install --release 115 --species homo_sapiens`. The proteome used for the self test is the same release's `pep.all`. |
 | gnomAD-SV | **v4.1** | matched by 0.5 reciprocal overlap; the nine ancestry groups in `criteria.GNOMAD_POPULATIONS` |
+| SV panel of normals | `dna/sv/sv_pon.38.bedpe.gz` (9,461,113 junctions) and `dna/sv/sgl_pon.38.bed.gz` (2,818,934 breakends), from `hmf_pipeline_resources.38_v2.0.0--3.tar.gz` — the files nf-core/oncoanalyser 2.0.0 gives the SV caller, so `INFO/PON_COUNT` in the VCFs comes from these. Query any junction with `tools/query_sv_pon.py`. **Panel size is not stated anywhere in the resource**; the largest counts it contains (14,498 for junctions, 15,684 for single breakends) put a floor under it, so a count is an ordinal with a known lower bound, not a frequency. |
 | LILAC resources | `misc/lilac/` from `hmf_pipeline_resources.38_v2.0.0--3.tar.gz` (oncoanalyser 2.0.0 default) | extract only that directory: `curl -sL <url> \| tar -xzf - --include='*misc/lilac/*'` |
 | HLA slice BED | `grch38_alt.plus_homologous.bed` (oncoanalyser `HLA_SLICE_BED_GRCH38_ALT_PATH`) | regions sliced before realignment |
 | chr6 for realignment | chr6 of `GRCh38_masked_exclusions_alts_hlas.fasta`, HMF genomes 25.1 | byte-range extract using the published `.fai`; must match the genome the BAMs were aligned to |
